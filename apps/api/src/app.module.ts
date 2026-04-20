@@ -5,6 +5,7 @@ import { getDatabaseConfig } from './config/database.config';
 import { UsersModule } from './users/users.module';
 import { AuthModule } from './auth/auth.module';
 import { SajuModule } from './saju/saju.module';
+import { CompatibilityModule } from './compatibility/compatibility.module';
 
 @Module({
   imports: [
@@ -16,6 +17,7 @@ import { SajuModule } from './saju/saju.module';
     UsersModule,
     AuthModule,
     SajuModule,
+    CompatibilityModule,
   ],
 })
 export class AppModule {}
