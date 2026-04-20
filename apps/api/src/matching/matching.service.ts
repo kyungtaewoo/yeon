@@ -2,7 +2,7 @@ import {
   Injectable, NotFoundException, ForbiddenException, BadRequestException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { Repository, In } from 'typeorm';
 import {
   findIdealMatchesV2,
   type CompatibilityWeights,
@@ -14,6 +14,15 @@ import { User } from '../users/entities/user.entity';
 import { SajuProfile } from '../saju/entities/saju-profile.entity';
 import { Match, MatchDecision } from './entities/match.entity';
 import { IdealSajuProfile } from './entities/ideal-saju-profile.entity';
+
+function calculateAge(birthDate: Date): number {
+  const now = new Date();
+  const birth = new Date(birthDate);
+  let age = now.getFullYear() - birth.getFullYear();
+  const m = now.getMonth() - birth.getMonth();
+  if (m < 0 || (m === 0 && now.getDate() < birth.getDate())) age--;
+  return age;
+}
 
 function profileToPillars(p: SajuProfile): FourPillars {
   return {
@@ -69,12 +78,128 @@ export class MatchingService {
       this.idealRepo.create({
         userId,
         rank: r.rank,
+        dayStem: r.pillars.day.stem,
+        dayBranch: r.pillars.day.branch,
         totalScore: r.totalScore,
         profile: r,
       }),
     );
 
-    return this.idealRepo.save(entities);
+    const saved = await this.idealRepo.save(entities);
+
+    // 이상형 프로필이 새로 생겼으므로 역방향 매칭 스캔
+    await this.scanAndCreateMatches(userId);
+
+    return saved;
+  }
+
+  /**
+   * 새 유저의 사주/이상형이 저장된 직후 호출.
+   * 양방향으로 일주(dayStem+dayBranch)가 일치하고
+   * 성별이 반대이며 나이 범위가 맞는 경우 Match 생성 (status=notified).
+   *
+   * Direction A: 기존 유저들의 IdealSajuProfile → 이 유저의 SajuProfile
+   * Direction B: 이 유저의 IdealSajuProfile → 기존 유저들의 SajuProfile
+   */
+  async scanAndCreateMatches(userId: string): Promise<Match[]> {
+    const user = await this.userRepo.findOne({ where: { id: userId } });
+    if (!user || !user.birthDate) return [];
+
+    const [saju, myIdeals] = await Promise.all([
+      this.sajuRepo.findOne({ where: { userId } }),
+      this.idealRepo.find({ where: { userId } }),
+    ]);
+
+    const userAge = calculateAge(user.birthDate);
+    const created: Match[] = [];
+
+    // ── Direction A: 기존 유저들의 이상형이 내 사주의 일주와 일치 ──
+    if (saju) {
+      const candidateIdeals = await this.idealRepo
+        .createQueryBuilder('ideal')
+        .where('ideal.userId != :userId', { userId })
+        .andWhere('ideal.dayStem = :ds', { ds: saju.dayStem })
+        .andWhere('ideal.dayBranch = :db', { db: saju.dayBranch })
+        .getMany();
+
+      if (candidateIdeals.length > 0) {
+        const searcherIds = [...new Set(candidateIdeals.map((i) => i.userId))];
+        const searchers = await this.userRepo.find({ where: { id: In(searcherIds) } });
+        const searcherMap = new Map(searchers.map((u) => [u.id, u]));
+
+        for (const ideal of candidateIdeals) {
+          const searcher = searcherMap.get(ideal.userId);
+          if (!searcher) continue;
+          if (searcher.gender === user.gender) continue;
+          if (userAge < searcher.preferredAgeMin || userAge > searcher.preferredAgeMax) continue;
+
+          const existing = await this.findExistingMatch(searcher.id, user.id);
+          if (existing) continue;
+
+          const m = await this.matchRepo.save(
+            this.matchRepo.create({
+              userAId: searcher.id,
+              userBId: user.id,
+              compatibilityScore: ideal.totalScore,
+              status: 'notified',
+              notifiedAt: new Date(),
+            }),
+          );
+          created.push(m);
+        }
+      }
+    }
+
+    // ── Direction B: 내 이상형이 기존 유저들의 사주 일주와 일치 ──
+    for (const ideal of myIdeals) {
+      const candidates = await this.sajuRepo
+        .createQueryBuilder('s')
+        .where('s.userId != :userId', { userId })
+        .andWhere('s.dayStem = :ds', { ds: ideal.dayStem })
+        .andWhere('s.dayBranch = :db', { db: ideal.dayBranch })
+        .getMany();
+
+      if (candidates.length === 0) continue;
+
+      const candUsers = await this.userRepo.find({
+        where: { id: In(candidates.map((c) => c.userId)) },
+      });
+      const candMap = new Map(candUsers.map((u) => [u.id, u]));
+
+      for (const cand of candidates) {
+        const candUser = candMap.get(cand.userId);
+        if (!candUser || !candUser.birthDate) continue;
+        if (candUser.gender === user.gender) continue;
+        const candAge = calculateAge(candUser.birthDate);
+        if (candAge < user.preferredAgeMin || candAge > user.preferredAgeMax) continue;
+
+        const existing = await this.findExistingMatch(user.id, candUser.id);
+        if (existing) continue;
+
+        const m = await this.matchRepo.save(
+          this.matchRepo.create({
+            userAId: user.id,
+            userBId: candUser.id,
+            compatibilityScore: ideal.totalScore,
+            status: 'notified',
+            notifiedAt: new Date(),
+          }),
+        );
+        created.push(m);
+      }
+    }
+
+    return created;
+  }
+
+  private findExistingMatch(aId: string, bId: string): Promise<Match | null> {
+    return this.matchRepo
+      .createQueryBuilder('m')
+      .where(
+        '(m.userAId = :a AND m.userBId = :b) OR (m.userAId = :b AND m.userBId = :a)',
+        { a: aId, b: bId },
+      )
+      .getOne();
   }
 
   /** 저장된 이상형 프로필 조회 */

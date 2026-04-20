@@ -6,6 +6,7 @@ import { User } from '../../users/entities/user.entity';
 
 @Entity('ideal_saju_profiles')
 @Index(['userId', 'rank'])
+@Index(['dayStem', 'dayBranch'])
 export class IdealSajuProfile {
   @PrimaryGeneratedColumn('uuid')
   id: string;
@@ -19,6 +20,12 @@ export class IdealSajuProfile {
 
   @Column()
   rank: number;
+
+  @Column()
+  dayStem: string;
+
+  @Column()
+  dayBranch: string;
 
   @Column({ type: 'decimal', precision: 5, scale: 2 })
   totalScore: number;
