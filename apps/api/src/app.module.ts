@@ -6,6 +6,7 @@ import { UsersModule } from './users/users.module';
 import { AuthModule } from './auth/auth.module';
 import { SajuModule } from './saju/saju.module';
 import { CompatibilityModule } from './compatibility/compatibility.module';
+import { MatchingModule } from './matching/matching.module';
 
 @Module({
   imports: [
@@ -18,6 +19,7 @@ import { CompatibilityModule } from './compatibility/compatibility.module';
     AuthModule,
     SajuModule,
     CompatibilityModule,
+    MatchingModule,
   ],
 })
 export class AppModule {}
