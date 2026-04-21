@@ -32,3 +32,22 @@ export { findIdealMatchesV2 } from './reverseMatch-v2';
 export type { IdealMatchProfileV2, ReverseMatchV2Input } from './reverseMatch-v2';
 
 export { reverseMatch } from './reverseMatch';
+
+// Sinsal / Daeun / Seun / Romance timing
+export {
+  findPeachBlossom, findHongyeomSal, findCheoneulGwiin,
+  analyzeAllSinsal,
+  isPeachBlossomBranch, isHongyeomBranch, isCheoneulBranch,
+} from './sinsal';
+export type { SinsalHit, SinsalAnalysis, PillarLocation } from './sinsal';
+
+export { calculateYearPillar, analyzeSeun, analyzeSeunRange } from './seun';
+export type { SeunAnalysis, SeunInteractions } from './seun';
+
+export { calculateDaeun, findDaeunForAge } from './daeun';
+export type { DaeunPillar, DaeunResult, CalculateDaeunInput } from './daeun';
+
+export { analyzeRomanceTiming, findMutualRomanceYears } from './romance-timing';
+export type {
+  RomanceYearAnalysis, RomanceTimingInput, RomanceTimingResult,
+} from './romance-timing';
