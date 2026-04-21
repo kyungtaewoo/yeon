@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { createClient } from "@/lib/supabase/client";
+import { apiClient } from "@/lib/api";
 import { useAuth } from "@/hooks/useAuth";
 import { useOnboardingStore } from "@/stores/onboardingStore";
 import { ELEMENT_NAMES } from "@/lib/saju/constants";
@@ -14,13 +14,13 @@ import type { Element } from "@/lib/saju/types";
 interface MatchSummary {
   id: string;
   status: string;
-  compatibility_score: number;
-  created_at: string;
+  compatibilityScore: number;
+  createdAt: string;
 }
 
 export default function HomePage() {
   const router = useRouter();
-  const { user, loading: authLoading } = useAuth();
+  const { user, token, loading: authLoading } = useAuth();
   const { idealProfiles, report } = useOnboardingStore();
   const [matches, setMatches] = useState<MatchSummary[]>([]);
   const [loading, setLoading] = useState(true);
@@ -31,34 +31,31 @@ export default function HomePage() {
   useEffect(() => {
     if (authLoading) return;
 
-    if (!user) {
+    if (!user || !token) {
       // 데모 모드 — DB 조회 없이 표시
       setLoading(false);
       return;
     }
 
     const fetchMatches = async () => {
-      const supabase = createClient();
-      const { data } = await supabase
-        .from("matches")
-        .select("id, status, compatibility_score, created_at")
-        .or(`user_a_id.eq.${user.id},user_b_id.eq.${user.id}`)
-        .order("created_at", { ascending: false })
-        .limit(5);
-
-      if (data) {
-        setMatches(data);
+      try {
+        const res = await apiClient<{ matches: MatchSummary[] }>('/matching', { token });
+        const recent = res.matches.slice(0, 5);
+        setMatches(recent);
         setPendingCount(
-          data.filter((m) =>
-            ["notified", "a_accepted", "b_accepted"].includes(m.status)
-          ).length
+          recent.filter((m) =>
+            ["notified", "a_accepted", "b_accepted"].includes(m.status),
+          ).length,
         );
+      } catch (err) {
+        console.error("매칭 조회 실패:", err);
+      } finally {
+        setLoading(false);
       }
-      setLoading(false);
     };
 
     fetchMatches();
-  }, [user, authLoading, router]);
+  }, [user, token, authLoading, router]);
 
   const statusLabels: Record<string, { text: string; variant: "default" | "secondary" | "destructive" }> = {
     pending: { text: "탐색 중", variant: "secondary" },
@@ -224,11 +221,11 @@ export default function HomePage() {
                         <p className="text-sm font-medium">
                           궁합 점수:{" "}
                           <span className="text-[var(--brand-gold)] font-bold">
-                            {match.compatibility_score}점
+                            {match.compatibilityScore}점
                           </span>
                         </p>
                         <p className="text-xs text-[var(--muted-foreground)]">
-                          {new Date(match.created_at).toLocaleDateString("ko-KR")}
+                          {new Date(match.createdAt).toLocaleDateString("ko-KR")}
                         </p>
                       </div>
                       <Badge variant={status.variant}>{status.text}</Badge>

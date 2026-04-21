@@ -5,20 +5,20 @@ import { useRouter } from "next/navigation";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { createClient } from "@/lib/supabase/client";
+import { apiClient } from "@/lib/api";
 import { useAuth } from "@/hooks/useAuth";
 import { useMatchRealtime } from "@/hooks/useRealtime";
 
 interface Match {
   id: string;
-  user_a_id: string;
-  user_b_id: string;
-  compatibility_score: number;
+  userAId: string;
+  userBId: string;
+  compatibilityScore: number;
   status: string;
-  user_a_decision: string;
-  user_b_decision: string;
-  created_at: string;
-  expires_at: string;
+  userADecision: string | null;
+  userBDecision: string | null;
+  createdAt: string;
+  expiresAt: string | null;
 }
 
 const STATUS_CONFIG: Record<string, { text: string; variant: "default" | "secondary" | "destructive"; color: string }> = {
@@ -35,28 +35,27 @@ const STATUS_CONFIG: Record<string, { text: string; variant: "default" | "second
 
 export default function MatchesPage() {
   const router = useRouter();
-  const { user, loading: authLoading } = useAuth();
+  const { user, token, loading: authLoading } = useAuth();
   const { newMatch } = useMatchRealtime(user?.id);
   const [matches, setMatches] = useState<Match[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    if (authLoading || !user) return;
+    if (authLoading || !user || !token) return;
 
     const fetchMatches = async () => {
-      const supabase = createClient();
-      const { data } = await supabase
-        .from("matches")
-        .select("*")
-        .or(`user_a_id.eq.${user.id},user_b_id.eq.${user.id}`)
-        .order("created_at", { ascending: false });
-
-      if (data) setMatches(data);
-      setLoading(false);
+      try {
+        const res = await apiClient<{ matches: Match[] }>('/matching', { token });
+        setMatches(res.matches);
+      } catch (err) {
+        console.error("매칭 조회 실패:", err);
+      } finally {
+        setLoading(false);
+      }
     };
 
     fetchMatches();
-  }, [user, authLoading, newMatch]);
+  }, [user, token, authLoading, newMatch]);
 
   if (authLoading || loading) {
     return (
@@ -75,9 +74,10 @@ export default function MatchesPage() {
     ["completed", "rejected", "expired"].includes(m.status)
   );
 
-  const getMyDecision = (match: Match) => {
+  const getMyDecision = (match: Match): string => {
     if (!user) return "pending";
-    return match.user_a_id === user.id ? match.user_a_decision : match.user_b_decision;
+    const decision = match.userAId === user.id ? match.userADecision : match.userBDecision;
+    return decision ?? "pending";
   };
 
   const getDaysLeft = (expiresAt: string) => {
@@ -88,7 +88,7 @@ export default function MatchesPage() {
   const renderMatchCard = (match: Match) => {
     const config = STATUS_CONFIG[match.status] || STATUS_CONFIG.pending;
     const myDecision = getMyDecision(match);
-    const daysLeft = match.expires_at ? getDaysLeft(match.expires_at) : null;
+    const daysLeft = match.expiresAt ? getDaysLeft(match.expiresAt) : null;
 
     return (
       <Card
@@ -103,12 +103,12 @@ export default function MatchesPage() {
                 className="h-10 w-10 rounded-full flex items-center justify-center text-white font-bold text-sm"
                 style={{ backgroundColor: "var(--brand-gold)" }}
               >
-                {match.compatibility_score}
+                {match.compatibilityScore}
               </div>
               <div>
-                <p className="text-sm font-medium">궁합 {match.compatibility_score}점</p>
+                <p className="text-sm font-medium">궁합 {match.compatibilityScore}점</p>
                 <p className="text-xs text-[var(--muted-foreground)]">
-                  {new Date(match.created_at).toLocaleDateString("ko-KR")}
+                  {new Date(match.createdAt).toLocaleDateString("ko-KR")}
                 </p>
               </div>
             </div>

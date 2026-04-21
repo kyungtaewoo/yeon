@@ -9,6 +9,9 @@ import { useOnboardingStore } from "@/stores/onboardingStore";
 import type { CompatibilityWeights } from "@/lib/saju/types";
 import { calculatePillars } from "@/lib/saju/pillars";
 import { findIdealMatchesV2 } from "@/lib/saju/reverseMatch-v2";
+import type { IdealMatchProfileV2 } from "@/lib/saju/reverseMatch-v2";
+import { apiClient } from "@/lib/api";
+import { useAuthStore } from "@/stores/authStore";
 
 const CATEGORIES: Array<{
   key: keyof CompatibilityWeights;
@@ -57,22 +60,39 @@ export default function PreferencesPage() {
     setAgeRange(ageRange[0], ageRange[1]);
 
     try {
-      const pillars = calculatePillars({
-        year: Number(birthYear),
-        month: Number(birthMonth),
-        day: Number(birthDay),
-        hour: birthHour,
-        isLunar,
-      });
+      const token = useAuthStore.getState().token;
 
-      const results = findIdealMatchesV2({
-        mySaju: pillars,
-        weights,
-        ageRange: { min: ageRange[0], max: ageRange[1] },
-        topN: 10,
-      });
+      if (token) {
+        // 로그인 상태: 백엔드가 이상형 탐색 + 저장 + 매칭 스캔까지 수행
+        await apiClient('/users/me', {
+          method: 'PATCH',
+          token,
+          body: { preferredAgeMin: ageRange[0], preferredAgeMax: ageRange[1] },
+        });
 
-      useOnboardingStore.getState().setIdealProfiles(results);
+        const res = await apiClient<{ profiles: { profile: IdealMatchProfileV2 }[] }>(
+          '/matching/find-ideal',
+          { method: 'POST', token, body: { weights, topN: 10 } },
+        );
+        useOnboardingStore.getState().setIdealProfiles(res.profiles.map((p) => p.profile));
+      } else {
+        // 데모 모드: 로컬 계산
+        const pillars = calculatePillars({
+          year: Number(birthYear),
+          month: Number(birthMonth),
+          day: Number(birthDay),
+          hour: birthHour,
+          isLunar,
+        });
+        const results = findIdealMatchesV2({
+          mySaju: pillars,
+          weights,
+          ageRange: { min: ageRange[0], max: ageRange[1] },
+          topN: 10,
+        });
+        useOnboardingStore.getState().setIdealProfiles(results);
+      }
+
       router.push("/ideal-match");
     } catch (e) {
       console.error("이상적 상대 탐색 에러:", e);

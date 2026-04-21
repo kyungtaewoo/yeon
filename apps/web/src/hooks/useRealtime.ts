@@ -1,80 +1,67 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
-import { createClient } from "@/lib/supabase/client";
-import type { RealtimeChannel } from "@supabase/supabase-js";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { apiClient } from "@/lib/api";
+import { useAuthStore } from "@/stores/authStore";
 
-interface MatchUpdate {
+export interface MatchUpdate {
   id: string;
   status: string;
-  compatibility_score: number;
+  compatibilityScore: number;
 }
 
 /**
- * Supabase Realtime으로 매칭 알림을 구독한다.
+ * 매칭 테이블 폴링 — Supabase Realtime 대체.
+ * NotificationGateway(Socket.IO)가 붙으면 WebSocket 구독으로 바꿀 예정.
+ *
+ * - 30초마다 /matching 조회
+ * - 이전과 비교해 새로 추가되거나 'notified' 상태가 된 매칭을 newMatch로 노출
  */
-export function useMatchRealtime(userId: string | undefined) {
-  const [newMatch, setNewMatch] = useState<MatchUpdate | null>(null);
-  const [channel, setChannel] = useState<RealtimeChannel | null>(null);
+const POLL_INTERVAL_MS = 30_000;
 
-  const clearNotification = useCallback(() => {
-    setNewMatch(null);
-  }, []);
+export function useMatchRealtime(userId: string | undefined) {
+  const token = useAuthStore((s) => s.token);
+  const [newMatch, setNewMatch] = useState<MatchUpdate | null>(null);
+  const knownIdsRef = useRef<Set<string>>(new Set());
+
+  const clearNotification = useCallback(() => setNewMatch(null), []);
 
   useEffect(() => {
-    if (!userId) return;
+    if (!userId || !token) return;
 
-    const supabase = createClient();
+    let cancelled = false;
 
-    // matches 테이블의 변경을 구독
-    const ch = supabase
-      .channel(`matches:${userId}`)
-      .on(
-        "postgres_changes",
-        {
-          event: "*",
-          schema: "public",
-          table: "matches",
-          filter: `user_a_id=eq.${userId}`,
-        },
-        (payload) => {
-          const record = payload.new as Record<string, unknown>;
-          if (record) {
-            setNewMatch({
-              id: record.id as string,
-              status: record.status as string,
-              compatibility_score: record.compatibility_score as number,
-            });
+    const poll = async () => {
+      try {
+        const res = await apiClient<{ matches: { id: string; status: string; compatibilityScore: number }[] }>(
+          '/matching',
+          { token },
+        );
+        if (cancelled) return;
+
+        const current = new Set(res.matches.map((m) => m.id));
+        const previouslyEmpty = knownIdsRef.current.size === 0;
+
+        for (const m of res.matches) {
+          const isNew = !knownIdsRef.current.has(m.id);
+          if (isNew && !previouslyEmpty && m.status === 'notified') {
+            setNewMatch({ id: m.id, status: m.status, compatibilityScore: m.compatibilityScore });
+            break;
           }
         }
-      )
-      .on(
-        "postgres_changes",
-        {
-          event: "*",
-          schema: "public",
-          table: "matches",
-          filter: `user_b_id=eq.${userId}`,
-        },
-        (payload) => {
-          const record = payload.new as Record<string, unknown>;
-          if (record) {
-            setNewMatch({
-              id: record.id as string,
-              status: record.status as string,
-              compatibility_score: record.compatibility_score as number,
-            });
-          }
-        }
-      )
-      .subscribe();
-
-    setChannel(ch);
-
-    return () => {
-      supabase.removeChannel(ch);
+        knownIdsRef.current = current;
+      } catch {
+        // 네트워크 실패 무시 — 다음 주기에 재시도
+      }
     };
-  }, [userId]);
+
+    poll();
+    const id = setInterval(poll, POLL_INTERVAL_MS);
+    return () => {
+      cancelled = true;
+      clearInterval(id);
+    };
+  }, [userId, token]);
 
   return { newMatch, clearNotification };
 }

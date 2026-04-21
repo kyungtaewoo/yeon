@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { createClient } from "@/lib/supabase/client";
+import { apiClient } from "@/lib/api";
 import { useAuth } from "@/hooks/useAuth";
 import { STEM_KOREAN, BRANCH_KOREAN, ELEMENT_NAMES, STEM_TO_ELEMENT, BRANCH_TO_ELEMENT } from "@/lib/saju/constants";
 import type { Element, HeavenlyStem, EarthlyBranch } from "@/lib/saju/types";
@@ -18,18 +18,22 @@ const ELEMENT_COLORS: Record<Element, string> = {
 };
 
 interface SajuProfile {
-  year_stem: HeavenlyStem;
-  year_branch: EarthlyBranch;
-  month_stem: HeavenlyStem;
-  month_branch: EarthlyBranch;
-  day_stem: HeavenlyStem;
-  day_branch: EarthlyBranch;
-  hour_stem: HeavenlyStem | null;
-  hour_branch: EarthlyBranch | null;
-  dominant_element: Element | null;
+  yearStem: HeavenlyStem;
+  yearBranch: EarthlyBranch;
+  monthStem: HeavenlyStem;
+  monthBranch: EarthlyBranch;
+  dayStem: HeavenlyStem;
+  dayBranch: EarthlyBranch;
+  hourStem: HeavenlyStem | null;
+  hourBranch: EarthlyBranch | null;
+  dominantElement: Element | null;
   yongshin: Element | null;
-  element_scores: Record<Element, number> | null;
-  report_data: Record<string, string> | null;
+  elementScores: Record<Element, number> | null;
+  reportData: Record<string, string> | null;
+}
+
+interface SajuReportResponse {
+  profile: SajuProfile;
 }
 
 function PillarCard({ label, stem, branch }: { label: string; stem: HeavenlyStem | null; branch: EarthlyBranch | null }) {
@@ -68,27 +72,26 @@ function PillarCard({ label, stem, branch }: { label: string; stem: HeavenlyStem
 
 export default function MySajuPage() {
   const router = useRouter();
-  const { user, loading: authLoading } = useAuth();
+  const { user, token, loading: authLoading } = useAuth();
   const [saju, setSaju] = useState<SajuProfile | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    if (authLoading || !user) return;
+    if (authLoading || !user || !token) return;
 
     const fetchSaju = async () => {
-      const supabase = createClient();
-      const { data } = await supabase
-        .from("saju_profiles")
-        .select("*")
-        .eq("user_id", user.id)
-        .single();
-
-      if (data) setSaju(data);
-      setLoading(false);
+      try {
+        const res = await apiClient<SajuReportResponse | null>('/saju/report', { token });
+        if (res?.profile) setSaju(res.profile);
+      } catch (err) {
+        console.error("사주 조회 실패:", err);
+      } finally {
+        setLoading(false);
+      }
     };
 
     fetchSaju();
-  }, [user, authLoading]);
+  }, [user, token, authLoading]);
 
   if (authLoading || loading) {
     return (
@@ -114,7 +117,7 @@ export default function MySajuPage() {
   }
 
   const elements: Element[] = ["wood", "fire", "earth", "metal", "water"];
-  const scores = saju.element_scores || { wood: 0, fire: 0, earth: 0, metal: 0, water: 0 };
+  const scores = saju.elementScores || { wood: 0, fire: 0, earth: 0, metal: 0, water: 0 };
   const maxScore = Math.max(...elements.map((e) => scores[e] || 0));
 
   return (
@@ -128,10 +131,10 @@ export default function MySajuPage() {
         <Card className="border-none shadow-lg">
           <CardContent className="pt-6">
             <div className="grid grid-cols-4 gap-3">
-              <PillarCard label="시주" stem={saju.hour_stem} branch={saju.hour_branch} />
-              <PillarCard label="일주" stem={saju.day_stem} branch={saju.day_branch} />
-              <PillarCard label="월주" stem={saju.month_stem} branch={saju.month_branch} />
-              <PillarCard label="연주" stem={saju.year_stem} branch={saju.year_branch} />
+              <PillarCard label="시주" stem={saju.hourStem} branch={saju.hourBranch} />
+              <PillarCard label="일주" stem={saju.dayStem} branch={saju.dayBranch} />
+              <PillarCard label="월주" stem={saju.monthStem} branch={saju.monthBranch} />
+              <PillarCard label="연주" stem={saju.yearStem} branch={saju.yearBranch} />
             </div>
           </CardContent>
         </Card>
@@ -159,14 +162,14 @@ export default function MySajuPage() {
 
         {/* 용신 & 주요 오행 */}
         <div className="grid grid-cols-2 gap-3">
-          {saju.dominant_element && (
+          {saju.dominantElement && (
             <Card className="border-none shadow-sm">
               <CardContent className="pt-4 text-center">
                 <p className="text-xs text-[var(--muted-foreground)]">주요 오행</p>
-                <p className="text-2xl font-bold font-[family-name:var(--font-serif)] mt-1" style={{ color: ELEMENT_COLORS[saju.dominant_element] }}>
-                  {ELEMENT_NAMES[saju.dominant_element].hanja}
+                <p className="text-2xl font-bold font-[family-name:var(--font-serif)] mt-1" style={{ color: ELEMENT_COLORS[saju.dominantElement] }}>
+                  {ELEMENT_NAMES[saju.dominantElement].hanja}
                 </p>
-                <p className="text-xs text-[var(--muted-foreground)]">{ELEMENT_NAMES[saju.dominant_element].ko}</p>
+                <p className="text-xs text-[var(--muted-foreground)]">{ELEMENT_NAMES[saju.dominantElement].ko}</p>
               </CardContent>
             </Card>
           )}
@@ -184,7 +187,7 @@ export default function MySajuPage() {
         </div>
 
         {/* 리포트 요약 */}
-        {saju.report_data && (
+        {saju.reportData && (
           <>
             {["personality", "romance", "wealth", "health"].map((key) => {
               const labels: Record<string, { title: string; icon: string }> = {
@@ -194,7 +197,7 @@ export default function MySajuPage() {
                 health: { title: "건강", icon: "🏥" },
               };
               const info = labels[key];
-              const content = saju.report_data?.[key];
+              const content = saju.reportData?.[key];
               if (!info || !content) return null;
               return (
                 <Card key={key} className="border-none shadow-sm">

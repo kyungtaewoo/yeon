@@ -4,43 +4,42 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { createClient } from "@/lib/supabase/client";
+import { apiClient } from "@/lib/api";
 import { useAuth } from "@/hooks/useAuth";
 
 interface Profile {
   nickname: string;
   gender: string;
-  birth_date: string;
-  avatar_url: string | null;
-  is_onboarding_complete: boolean;
+  birthDate: string | null;
+  avatarUrl: string | null;
+  isOnboardingComplete: boolean;
 }
 
 export default function ProfilePage() {
   const router = useRouter();
-  const { user, loading: authLoading, signOut } = useAuth();
+  const { user, token, loading: authLoading, signOut } = useAuth();
   const [profile, setProfile] = useState<Profile | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    if (authLoading || !user) return;
+    if (authLoading || !user || !token) return;
 
     const fetchProfile = async () => {
-      const supabase = createClient();
-      const { data } = await supabase
-        .from("profiles")
-        .select("nickname, gender, birth_date, avatar_url, is_onboarding_complete")
-        .eq("id", user.id)
-        .single();
-
-      if (data) setProfile(data);
-      setLoading(false);
+      try {
+        const me = await apiClient<Profile>('/users/me', { token });
+        setProfile(me);
+      } catch (err) {
+        console.error("프로필 조회 실패:", err);
+      } finally {
+        setLoading(false);
+      }
     };
 
     fetchProfile();
-  }, [user, authLoading]);
+  }, [user, token, authLoading]);
 
-  const handleSignOut = async () => {
-    await signOut();
+  const handleSignOut = () => {
+    signOut();
     router.replace("/login");
   };
 
@@ -73,10 +72,9 @@ export default function ProfilePage() {
               <div>
                 <p className="text-lg font-bold">{profile?.nickname || "이름 없음"}</p>
                 <p className="text-sm text-[var(--muted-foreground)]">
-                  {profile?.gender === "male" ? "남성" : "여성"} ·{" "}
-                  {profile?.birth_date}
+                  {profile?.gender === "male" ? "남성" : "여성"}
+                  {profile?.birthDate ? ` · ${profile.birthDate.split('T')[0]}` : ""}
                 </p>
-                <p className="text-xs text-[var(--muted-foreground)]">{user?.email}</p>
               </div>
             </div>
           </CardContent>

@@ -7,6 +7,8 @@ import { Card, CardContent } from "@/components/ui/card";
 import { useOnboardingStore } from "@/stores/onboardingStore";
 import { calculatePillars } from "@/lib/saju/pillars";
 import { generateReport } from "@/lib/saju/report";
+import { apiClient } from "@/lib/api";
+import { useAuthStore } from "@/stores/authStore";
 
 const HOUR_OPTIONS = [
   { label: "자시 (23:00~01:00)", value: 0 },
@@ -60,6 +62,27 @@ export default function SajuInputPage() {
       });
       const report = generateReport(pillars);
       useOnboardingStore.getState().setReport(pillars, report);
+
+      // 로그인 상태면 백엔드에도 저장 (Match 자동 스캔도 트리거됨)
+      const token = useAuthStore.getState().token;
+      if (token) {
+        try {
+          await apiClient('/saju/calculate-and-save', {
+            method: 'POST',
+            token,
+            body: {
+              year: Number(year),
+              month: Number(month),
+              day: Number(day),
+              hour,
+              isLunar,
+            },
+          });
+        } catch (apiErr) {
+          console.warn("백엔드 사주 저장 실패 — 로컬 결과는 유지됩니다:", apiErr);
+        }
+      }
+
       router.push("/saju-report");
     } catch (e) {
       console.error("사주 분석 에러:", e);
