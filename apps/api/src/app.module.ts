@@ -10,6 +10,7 @@ import { MatchingModule } from './matching/matching.module';
 import { RomanceTimingModule } from './romance-timing/romance-timing.module';
 import { FriendsModule } from './friends/friends.module';
 import { PaymentModule } from './payment/payment.module';
+import { NotificationModule } from './notification/notification.module';
 
 @Module({
   imports: [
@@ -26,6 +27,7 @@ import { PaymentModule } from './payment/payment.module';
     RomanceTimingModule,
     FriendsModule,
     PaymentModule,
+    NotificationModule,
   ],
 })
 export class AppModule {}

@@ -14,6 +14,7 @@ import { User } from '../users/entities/user.entity';
 import { SajuProfile } from '../saju/entities/saju-profile.entity';
 import { Match, MatchDecision } from './entities/match.entity';
 import { IdealSajuProfile } from './entities/ideal-saju-profile.entity';
+import { NotificationGateway } from '../notification/notification.gateway';
 
 function calculateAge(birthDate: Date): number {
   const now = new Date();
@@ -46,6 +47,7 @@ export class MatchingService {
     private readonly matchRepo: Repository<Match>,
     @InjectRepository(IdealSajuProfile)
     private readonly idealRepo: Repository<IdealSajuProfile>,
+    private readonly notifications: NotificationGateway,
   ) {}
 
   /**
@@ -146,6 +148,7 @@ export class MatchingService {
             }),
           );
           created.push(m);
+          this.emitMatchNew(m);
         }
       }
     }
@@ -186,10 +189,22 @@ export class MatchingService {
           }),
         );
         created.push(m);
+        this.emitMatchNew(m);
       }
     }
 
     return created;
+  }
+
+  private emitMatchNew(m: Match) {
+    const payload = {
+      id: m.id,
+      compatibilityScore: m.compatibilityScore,
+      status: m.status,
+      createdAt: m.createdAt,
+    };
+    this.notifications.emitToUser(m.userAId, 'match:new', payload);
+    this.notifications.emitToUser(m.userBId, 'match:new', payload);
   }
 
   private findExistingMatch(aId: string, bId: string): Promise<Match | null> {
@@ -261,6 +276,21 @@ export class MatchingService {
       else if (bAccepted) match.status = 'b_accepted';
     }
 
-    return this.matchRepo.save(match);
+    const saved = await this.matchRepo.save(match);
+
+    // 상대방에게 알림
+    const counterpartId = isUserA ? match.userBId : match.userAId;
+    const event = decision === 'rejected'
+      ? 'match:rejected'
+      : saved.status === 'both_accepted'
+        ? 'match:completed'
+        : 'match:accepted';
+    this.notifications.emitToUser(counterpartId, event, {
+      id: saved.id,
+      status: saved.status,
+      by: userId,
+    });
+
+    return saved;
   }
 }
