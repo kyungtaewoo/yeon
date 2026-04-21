@@ -10,8 +10,39 @@ function CallbackInner() {
   const searchParams = useSearchParams();
 
   useEffect(() => {
+    const token = searchParams.get("token");
+    const isNew = searchParams.get("isNew") === "true";
     const code = searchParams.get("code");
 
+    // 새 플로우: 백엔드가 ?token=&isNew= 로 리다이렉트한 경우
+    if (token) {
+      const handleTokenRedirect = async () => {
+        try {
+          const user = await apiClient<{
+            id: string;
+            nickname: string;
+            gender: string;
+            isOnboardingComplete: boolean;
+            isPremium: boolean;
+          }>('/auth/me', { token });
+
+          useAuthStore.getState().setAuth(token, user);
+
+          if (isNew || !user.isOnboardingComplete) {
+            router.replace("/saju-input");
+          } else {
+            router.replace("/home");
+          }
+        } catch (error) {
+          console.error("Auth callback error:", error);
+          router.replace("/login");
+        }
+      };
+      handleTokenRedirect();
+      return;
+    }
+
+    // 구 플로우: ?code= 로 직접 도착한 경우 (프론트에서 code 교환)
     if (!code) {
       router.replace("/login");
       return;

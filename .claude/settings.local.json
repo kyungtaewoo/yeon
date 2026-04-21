@@ -73,7 +73,13 @@
       "Bash(kill 75266)",
       "Bash(pkill -9 -f \"nest start\")",
       "Bash(pkill -9 -f \"dist/main\")",
-      "Bash(python3 -c \"import sys,json; d=json.load\\(sys.stdin\\); print\\('isPremium:', d['isPremium']\\); print\\('general:', 'ok' if d['report']['general'] else 'null'\\); print\\('romantic:', 'ok' if d['report']['romantic'] else 'null'\\); print\\('deep:', 'ok' if d['report']['deep'] else 'null'\\)\")"
+      "Bash(python3 -c \"import sys,json; d=json.load\\(sys.stdin\\); print\\('isPremium:', d['isPremium']\\); print\\('general:', 'ok' if d['report']['general'] else 'null'\\); print\\('romantic:', 'ok' if d['report']['romantic'] else 'null'\\); print\\('deep:', 'ok' if d['report']['deep'] else 'null'\\)\")",
+      "Bash(sed -i '' 's/PRODUCT_BUNDLE_IDENTIFIER = com\\\\.yeon\\\\.app;/PRODUCT_BUNDLE_IDENTIFIER = com.woopitel.yeon;/g' ios/App/App.xcodeproj/project.pbxproj)",
+      "Bash(sed -i '' 's|<string>com\\\\.yeon\\\\.app</string>|<string>com.woopitel.yeon</string>|g' ios/App/App/Info.plist)",
+      "Bash(NEXT_PUBLIC_API_URL=http://43.202.240.51/api npm run build)",
+      "Bash(git check-ignore *)",
+      "Bash(rm -rf .next out)",
+      "Bash(CAPACITOR_BUILD=1 npm run build)"
     ]
   }
 }

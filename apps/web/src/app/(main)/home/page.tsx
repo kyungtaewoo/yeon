@@ -1,12 +1,13 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { apiClient } from "@/lib/api";
 import { useAuth } from "@/hooks/useAuth";
+import { useAuthStore } from "@/stores/authStore";
 import { useOnboardingStore } from "@/stores/onboardingStore";
 import { ELEMENT_NAMES } from "@/lib/saju/constants";
 import type { Element } from "@/lib/saju/types";
@@ -21,16 +22,43 @@ interface MatchSummary {
 
 export default function HomePage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { user, token, loading: authLoading } = useAuth();
   const { idealProfiles, report } = useOnboardingStore();
   const [matches, setMatches] = useState<MatchSummary[]>([]);
   const [loading, setLoading] = useState(true);
   const [pendingCount, setPendingCount] = useState(0);
+  const [ingestingToken, setIngestingToken] = useState(false);
 
   const isDemo = !user;
 
+  // URL에 ?token=이 오면 authStore(localStorage)에 저장하고 URL에서 제거
   useEffect(() => {
-    if (authLoading) return;
+    const urlToken = searchParams.get("token");
+    if (!urlToken) return;
+
+    setIngestingToken(true);
+    (async () => {
+      try {
+        const me = await apiClient<{
+          id: string;
+          nickname: string;
+          gender: string;
+          isOnboardingComplete: boolean;
+          isPremium: boolean;
+        }>('/auth/me', { token: urlToken });
+        useAuthStore.getState().setAuth(urlToken, me);
+      } catch (err) {
+        console.error("토큰 인증 실패:", err);
+      } finally {
+        router.replace("/home");
+        setIngestingToken(false);
+      }
+    })();
+  }, [searchParams, router]);
+
+  useEffect(() => {
+    if (authLoading || ingestingToken) return;
 
     if (!user || !token) {
       // 데모 모드 — DB 조회 없이 표시
@@ -56,7 +84,7 @@ export default function HomePage() {
     };
 
     fetchMatches();
-  }, [user, token, authLoading, router]);
+  }, [user, token, authLoading, ingestingToken, router]);
 
   const statusLabels: Record<string, { text: string; variant: "default" | "secondary" | "destructive" }> = {
     pending: { text: "탐색 중", variant: "secondary" },
@@ -69,7 +97,7 @@ export default function HomePage() {
     expired: { text: "만료", variant: "destructive" },
   };
 
-  if (authLoading || loading) {
+  if (authLoading || ingestingToken || loading) {
     return (
       <div className="px-4 py-6">
         <div className="mx-auto max-w-md text-center py-20">

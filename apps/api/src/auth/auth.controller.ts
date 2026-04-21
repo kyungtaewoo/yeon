@@ -1,5 +1,5 @@
-import { Controller, Post, Get, Body, Query, Res, UseGuards, Request } from '@nestjs/common';
-import type { Response } from 'express';
+import { Controller, Post, Get, Body, Query, Res, Req, UseGuards, Request } from '@nestjs/common';
+import type { Request as ExpressRequest, Response } from 'express';
 import { ConfigService } from '@nestjs/config';
 import { AuthService } from './auth.service';
 import { JwtAuthGuard } from './guards/jwt-auth.guard';
@@ -34,16 +34,28 @@ export class AuthController {
    * code를 JWT로 교환 후, 앱의 커스텀 URL scheme으로 리다이렉트
    */
   @Get('kakao/callback')
-  async kakaoCallback(@Query('code') code: string, @Res() res: Response) {
+  async kakaoCallback(
+    @Query('code') code: string,
+    @Req() req: ExpressRequest,
+    @Res() res: Response,
+  ) {
     try {
       const callbackUrl = this.config.get('KAKAO_CALLBACK_URL');
       const result = await this.authService.kakaoLogin(code, callbackUrl!);
 
-      // 앱으로 돌려보내기 — yeonapp:// 커스텀 URL scheme 사용
-      const appUrl = `yeonapp://auth?token=${result.accessToken}&isNew=${result.isNewUser}`;
-
-      // fallback: 웹에서 접속한 경우
       const frontendUrl = this.config.get('FRONTEND_URL', 'http://localhost:3001');
+      const userAgent = req.headers['user-agent'] ?? '';
+      // Capacitor 앱은 시스템 Safari로 OAuth를 열기 때문에 콜백은 모바일 브라우저에서 발생
+      const isNativeApp = /iPhone|iPad|iPod|Android/i.test(userAgent);
+
+      if (!isNativeApp) {
+        return res.redirect(
+          `${frontendUrl}/callback?token=${result.accessToken}&isNew=${result.isNewUser}`,
+        );
+      }
+
+      const appUrl = `yeonapp://auth?token=${result.accessToken}&isNew=${result.isNewUser}`;
+      const webFallback = `${frontendUrl}/callback?token=${result.accessToken}&isNew=${result.isNewUser}`;
 
       res.send(`
         <html>
@@ -52,11 +64,9 @@ export class AuthController {
           <h2>로그인 성공!</h2>
           <p>앱으로 돌아가는 중...</p>
           <script>
-            // 앱 커스텀 URL scheme으로 리다이렉트 시도
             window.location.href = '${appUrl}';
-            // 3초 후에도 앱으로 안 돌아가면 웹으로
             setTimeout(function() {
-              window.location.href = '${frontendUrl}/home?token=${result.accessToken}';
+              window.location.href = '${webFallback}';
             }, 3000);
           </script>
         </body>
