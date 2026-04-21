@@ -15,8 +15,13 @@ import { ConfigService } from '@nestjs/config';
  *
  * emit 헬퍼는 MatchingService / FriendsService에서 호출.
  */
+const SOCKET_ORIGINS = (process.env.CORS_ORIGINS || 'http://localhost:3001,http://localhost:3000')
+  .split(',')
+  .map((s) => s.trim())
+  .filter(Boolean);
+
 @WebSocketGateway({
-  cors: { origin: true, credentials: true },
+  cors: { origin: SOCKET_ORIGINS, credentials: true },
   namespace: '/',
 })
 export class NotificationGateway implements OnGatewayConnection, OnGatewayDisconnect {
