@@ -7,7 +7,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "ios:sync": "next build && npx cap sync ios",
+    "ios:sync": "CAPACITOR_BUILD=1 next build && npx cap sync ios",
     "ios:open": "npx cap open ios"
   },
   "dependencies": {
