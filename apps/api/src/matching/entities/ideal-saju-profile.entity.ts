@@ -3,6 +3,7 @@ import {
   CreateDateColumn, ManyToOne, JoinColumn, Index,
 } from 'typeorm';
 import { User } from '../../users/entities/user.entity';
+import { decimalTransformer } from '../../common/decimal.transformer';
 
 @Entity('ideal_saju_profiles')
 @Index(['userId', 'rank'])
@@ -27,7 +28,7 @@ export class IdealSajuProfile {
   @Column()
   dayBranch: string;
 
-  @Column({ type: 'decimal', precision: 5, scale: 2 })
+  @Column({ type: 'decimal', precision: 5, scale: 2, transformer: decimalTransformer })
   totalScore: number;
 
   @Column({ type: 'jsonb' })

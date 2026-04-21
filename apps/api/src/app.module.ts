@@ -8,6 +8,7 @@ import { SajuModule } from './saju/saju.module';
 import { CompatibilityModule } from './compatibility/compatibility.module';
 import { MatchingModule } from './matching/matching.module';
 import { RomanceTimingModule } from './romance-timing/romance-timing.module';
+import { FriendsModule } from './friends/friends.module';
 
 @Module({
   imports: [
@@ -22,6 +23,7 @@ import { RomanceTimingModule } from './romance-timing/romance-timing.module';
     CompatibilityModule,
     MatchingModule,
     RomanceTimingModule,
+    FriendsModule,
   ],
 })
 export class AppModule {}

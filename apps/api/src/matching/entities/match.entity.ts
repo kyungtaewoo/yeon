@@ -3,6 +3,7 @@ import {
   CreateDateColumn, ManyToOne, JoinColumn, Index,
 } from 'typeorm';
 import { User } from '../../users/entities/user.entity';
+import { decimalTransformer } from '../../common/decimal.transformer';
 
 export type MatchStatus =
   | 'pending'
@@ -37,7 +38,7 @@ export class Match {
   @Column()
   userBId: string;
 
-  @Column({ type: 'decimal', precision: 5, scale: 2 })
+  @Column({ type: 'decimal', precision: 5, scale: 2, transformer: decimalTransformer })
   compatibilityScore: number;
 
   @Column({ type: 'jsonb', nullable: true })
