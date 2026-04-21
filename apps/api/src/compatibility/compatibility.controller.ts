@@ -16,7 +16,7 @@ export class CompatibilityController {
     @Request() req: any,
     @Body() body: { otherUserId: string },
   ) {
-    return this.service.calculateForUsers(req.user.id, body.otherUserId);
+    return this.service.calculateForCurrentUser(req.user.id, body.otherUserId);
   }
 
   /**

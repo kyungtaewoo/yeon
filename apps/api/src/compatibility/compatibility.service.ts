@@ -77,6 +77,25 @@ export class CompatibilityService {
     };
   }
 
+  /** 현재 유저의 프리미엄 여부로 3단계 리포트를 마스킹 */
+  private async maskByPremium(
+    currentUserId: string,
+    full: FullThreeTier,
+  ): Promise<{ report: ThreeTierCompatibility; isPremium: boolean }> {
+    const user = await this.userRepo.findOne({ where: { id: currentUserId } });
+    const premium = isPremiumUser(user);
+    return {
+      report: premium ? full : maskForFree(full),
+      isPremium: premium,
+    };
+  }
+
+  /** 현재 유저 기준으로 상대방과의 궁합 즉시 계산 (프리미엄 마스킹 적용) */
+  async calculateForCurrentUser(currentUserId: string, otherUserId: string) {
+    const full = await this.calculateForUsers(currentUserId, otherUserId);
+    return this.maskByPremium(currentUserId, full);
+  }
+
   /**
    * 매칭 리포트 조회. 캐시 없으면 계산 후 저장.
    * 프리미엄이 아니면 romantic/deep 마스킹 처리하여 반환.
@@ -87,9 +106,6 @@ export class CompatibilityService {
     if (match.userAId !== currentUserId && match.userBId !== currentUserId) {
       throw new ForbiddenException('이 매칭에 대한 권한이 없습니다');
     }
-
-    const user = await this.userRepo.findOne({ where: { id: currentUserId } });
-    const premium = isPremiumUser(user);
 
     // 캐시된 full 리포트 (or 새 계산)
     let full: FullThreeTier;
@@ -102,10 +118,7 @@ export class CompatibilityService {
       await this.matchRepo.save(match);
     }
 
-    return {
-      match,
-      report: premium ? full : maskForFree(full),
-      isPremium: premium,
-    };
+    const { report, isPremium } = await this.maskByPremium(currentUserId, full);
+    return { match, report, isPremium };
   }
 }

@@ -1,15 +1,18 @@
 import type { Metadata, Viewport } from "next";
 import "./globals.css";
+import { ServiceWorkerRegister } from "@/components/shared/ServiceWorkerRegister";
 
 export const metadata: Metadata = {
   title: "緣 (연) — 사주궁합 매칭",
   description: "사주명리학 기반 역방향 매칭 소개팅 플랫폼",
+  applicationName: "緣",
   appleWebApp: {
     capable: true,
     statusBarStyle: "black-translucent",
     title: "緣",
   },
   icons: {
+    icon: "/icon-192x192.svg",
     apple: "/icon-192x192.svg",
   },
 };
@@ -42,6 +45,7 @@ export default function RootLayout({
         `}} />
       </head>
       <body className="min-h-full flex flex-col" style={{ fontFamily: "var(--font-sans)" }}>
+        <ServiceWorkerRegister />
         {children}
       </body>
     </html>
