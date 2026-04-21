@@ -9,6 +9,7 @@ import { CompatibilityModule } from './compatibility/compatibility.module';
 import { MatchingModule } from './matching/matching.module';
 import { RomanceTimingModule } from './romance-timing/romance-timing.module';
 import { FriendsModule } from './friends/friends.module';
+import { PaymentModule } from './payment/payment.module';
 
 @Module({
   imports: [
@@ -24,6 +25,7 @@ import { FriendsModule } from './friends/friends.module';
     MatchingModule,
     RomanceTimingModule,
     FriendsModule,
+    PaymentModule,
   ],
 })
 export class AppModule {}
