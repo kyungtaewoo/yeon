@@ -1,5 +1,5 @@
 import {
-  Injectable, NotFoundException, BadRequestException, Logger,
+  Injectable, NotFoundException, BadRequestException, ForbiddenException, Logger,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
@@ -8,10 +8,11 @@ import { randomUUID } from 'crypto';
 import { User } from '../users/entities/user.entity';
 import { Payment } from './entities/payment.entity';
 import { Subscription, BillingCycle } from './entities/subscription.entity';
+import { isPremiumUser } from '../common/premium.util';
 
 const PRICING: Record<BillingCycle, { amount: number; days: number }> = {
   monthly: { amount: 9900, days: 30 },
-  yearly: { amount: 99000, days: 365 },
+  yearly: { amount: 79900, days: 365 },
 };
 
 const TOSS_API_URL = 'https://api.tosspayments.com/v1';
@@ -171,6 +172,37 @@ export class PaymentService {
     if (!sub) throw new NotFoundException('활성 구독이 없습니다');
     sub.isActive = false;
     return this.subRepo.save(sub);
+  }
+
+  /**
+   * 이상형 재탐색 쿼터 소모 — 프리미엄은 무제한 통과,
+   * 무료는 Subscription.idealSearchRemaining 차감 (없으면 기본 1로 시작).
+   * 쿼터 소진 시 403.
+   */
+  async consumeIdealSearch(userId: string): Promise<void> {
+    const user = await this.userRepo.findOne({ where: { id: userId } });
+    if (!user) throw new NotFoundException('유저를 찾을 수 없습니다');
+
+    if (isPremiumUser(user)) return;
+
+    let sub = await this.subRepo.findOne({ where: { userId } });
+    if (!sub) {
+      sub = await this.subRepo.save(
+        this.subRepo.create({
+          userId,
+          plan: 'free',
+          isActive: true,
+          idealSearchRemaining: 1,
+        }),
+      );
+    }
+    if (sub.idealSearchRemaining <= 0) {
+      throw new ForbiddenException(
+        '이상형 재탐색 무료 횟수를 모두 사용했습니다. 프리미엄 구독 후 이용해주세요.',
+      );
+    }
+    sub.idealSearchRemaining -= 1;
+    await this.subRepo.save(sub);
   }
 
   /** 구독 현황 조회 */

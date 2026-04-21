@@ -15,6 +15,7 @@ import { SajuProfile } from '../saju/entities/saju-profile.entity';
 import { Match, MatchDecision } from './entities/match.entity';
 import { IdealSajuProfile } from './entities/ideal-saju-profile.entity';
 import { NotificationGateway } from '../notification/notification.gateway';
+import { PaymentService } from '../payment/payment.service';
 
 function calculateAge(birthDate: Date): number {
   const now = new Date();
@@ -48,6 +49,7 @@ export class MatchingService {
     @InjectRepository(IdealSajuProfile)
     private readonly idealRepo: Repository<IdealSajuProfile>,
     private readonly notifications: NotificationGateway,
+    private readonly paymentService: PaymentService,
   ) {}
 
   /**
@@ -65,6 +67,9 @@ export class MatchingService {
     if (!saju) {
       throw new BadRequestException('사주 프로필이 없습니다. 먼저 사주를 입력해주세요.');
     }
+
+    // 무료 쿼터 체크 (프리미엄은 통과)
+    await this.paymentService.consumeIdealSearch(userId);
 
     const results = findIdealMatchesV2({
       mySaju: profileToPillars(saju),
@@ -142,7 +147,7 @@ export class MatchingService {
             this.matchRepo.create({
               userAId: searcher.id,
               userBId: user.id,
-              compatibilityScore: ideal.totalScore,
+              idealMatchScore: ideal.totalScore,
               status: 'notified',
               notifiedAt: new Date(),
             }),
@@ -183,7 +188,7 @@ export class MatchingService {
           this.matchRepo.create({
             userAId: user.id,
             userBId: candUser.id,
-            compatibilityScore: ideal.totalScore,
+            idealMatchScore: ideal.totalScore,
             status: 'notified',
             notifiedAt: new Date(),
           }),
@@ -199,7 +204,7 @@ export class MatchingService {
   private emitMatchNew(m: Match) {
     const payload = {
       id: m.id,
-      compatibilityScore: m.compatibilityScore,
+      idealMatchScore: m.idealMatchScore,
       status: m.status,
       createdAt: m.createdAt,
     };

@@ -14,8 +14,16 @@ import {
 } from '@yeon/saju-engine';
 import { SajuProfile } from '../saju/entities/saju-profile.entity';
 import { Match } from '../matching/entities/match.entity';
+import { User } from '../users/entities/user.entity';
+import { isPremiumUser } from '../common/premium.util';
 
 export interface ThreeTierCompatibility {
+  general: GeneralCompatibilityResult;
+  romantic: RomanticCompatibilityResult | null;
+  deep: DeepCompatibilityResult | null;
+}
+
+export interface FullThreeTier {
   general: GeneralCompatibilityResult;
   romantic: RomanticCompatibilityResult;
   deep: DeepCompatibilityResult;
@@ -32,6 +40,14 @@ function profileToPillars(p: SajuProfile): FourPillars {
   };
 }
 
+function maskForFree(full: FullThreeTier): ThreeTierCompatibility {
+  return {
+    general: full.general,
+    romantic: null,
+    deep: null,
+  };
+}
+
 @Injectable()
 export class CompatibilityService {
   constructor(
@@ -39,10 +55,11 @@ export class CompatibilityService {
     private readonly sajuRepo: Repository<SajuProfile>,
     @InjectRepository(Match)
     private readonly matchRepo: Repository<Match>,
+    @InjectRepository(User)
+    private readonly userRepo: Repository<User>,
   ) {}
 
-  /** 두 유저 ID → 3단계 궁합 계산 */
-  async calculateForUsers(userAId: string, userBId: string): Promise<ThreeTierCompatibility> {
+  async calculateForUsers(userAId: string, userBId: string): Promise<FullThreeTier> {
     const [a, b] = await Promise.all([
       this.sajuRepo.findOne({ where: { userId: userAId } }),
       this.sajuRepo.findOne({ where: { userId: userBId } }),
@@ -52,7 +69,7 @@ export class CompatibilityService {
     return this.compute(profileToPillars(a), profileToPillars(b));
   }
 
-  compute(sajuA: FourPillars, sajuB: FourPillars): ThreeTierCompatibility {
+  compute(sajuA: FourPillars, sajuB: FourPillars): FullThreeTier {
     return {
       general: calculateGeneralCompatibility(sajuA, sajuB),
       romantic: calculateRomanticCompatibility(sajuA, sajuB),
@@ -60,7 +77,10 @@ export class CompatibilityService {
     };
   }
 
-  /** 매칭 리포트 조회 (캐시 없으면 계산 후 저장) */
+  /**
+   * 매칭 리포트 조회. 캐시 없으면 계산 후 저장.
+   * 프리미엄이 아니면 romantic/deep 마스킹 처리하여 반환.
+   */
   async getForMatch(matchId: string, currentUserId: string) {
     const match = await this.matchRepo.findOne({ where: { id: matchId } });
     if (!match) throw new NotFoundException('매칭을 찾을 수 없습니다');
@@ -68,14 +88,24 @@ export class CompatibilityService {
       throw new ForbiddenException('이 매칭에 대한 권한이 없습니다');
     }
 
+    const user = await this.userRepo.findOne({ where: { id: currentUserId } });
+    const premium = isPremiumUser(user);
+
+    // 캐시된 full 리포트 (or 새 계산)
+    let full: FullThreeTier;
     if (match.compatibilityReport) {
-      return { match, report: match.compatibilityReport as ThreeTierCompatibility };
+      full = match.compatibilityReport as FullThreeTier;
+    } else {
+      full = await this.calculateForUsers(match.userAId, match.userBId);
+      match.compatibilityReport = full;
+      match.compatibilityScore = full.general.totalScore;
+      await this.matchRepo.save(match);
     }
 
-    const report = await this.calculateForUsers(match.userAId, match.userBId);
-    match.compatibilityReport = report;
-    match.compatibilityScore = report.general.totalScore;
-    await this.matchRepo.save(match);
-    return { match, report };
+    return {
+      match,
+      report: premium ? full : maskForFree(full),
+      isPremium: premium,
+    };
   }
 }

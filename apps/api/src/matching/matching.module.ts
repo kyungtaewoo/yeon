@@ -7,11 +7,13 @@ import { IdealSajuProfile } from './entities/ideal-saju-profile.entity';
 import { MatchingService } from './matching.service';
 import { MatchingController } from './matching.controller';
 import { NotificationModule } from '../notification/notification.module';
+import { PaymentModule } from '../payment/payment.module';
 
 @Module({
   imports: [
     TypeOrmModule.forFeature([User, SajuProfile, Match, IdealSajuProfile]),
     NotificationModule,
+    PaymentModule,
   ],
   providers: [MatchingService],
   controllers: [MatchingController],

@@ -38,8 +38,13 @@ export class Match {
   @Column()
   userBId: string;
 
-  @Column({ type: 'decimal', precision: 5, scale: 2, transformer: decimalTransformer })
-  compatibilityScore: number;
+  /** 매칭 성립 당시의 이상형 매칭 점수 (IdealSajuProfile.totalScore). */
+  @Column({ type: 'decimal', precision: 5, scale: 2, nullable: true, transformer: decimalTransformer })
+  idealMatchScore: number | null;
+
+  /** /compatibility/:matchId 계산 후 채워지는 실제 3단계 궁합 점수 (일반 궁합 총점). */
+  @Column({ type: 'decimal', precision: 5, scale: 2, nullable: true, transformer: decimalTransformer })
+  compatibilityScore: number | null;
 
   @Column({ type: 'jsonb', nullable: true })
   compatibilityReport: any;

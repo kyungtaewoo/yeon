@@ -14,7 +14,8 @@ import type { Element } from "@/lib/saju/types";
 interface MatchSummary {
   id: string;
   status: string;
-  compatibilityScore: number;
+  idealMatchScore: number | null;
+  compatibilityScore: number | null;
   createdAt: string;
 }
 
@@ -221,7 +222,7 @@ export default function HomePage() {
                         <p className="text-sm font-medium">
                           궁합 점수:{" "}
                           <span className="text-[var(--brand-gold)] font-bold">
-                            {match.compatibilityScore}점
+                            {match.compatibilityScore ?? match.idealMatchScore ?? "-"}점
                           </span>
                         </p>
                         <p className="text-xs text-[var(--muted-foreground)]">

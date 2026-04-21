@@ -13,7 +13,8 @@ interface Match {
   id: string;
   userAId: string;
   userBId: string;
-  compatibilityScore: number;
+  idealMatchScore: number | null;
+  compatibilityScore: number | null;
   status: string;
   userADecision: string | null;
   userBDecision: string | null;
@@ -103,10 +104,15 @@ export default function MatchesPage() {
                 className="h-10 w-10 rounded-full flex items-center justify-center text-white font-bold text-sm"
                 style={{ backgroundColor: "var(--brand-gold)" }}
               >
-                {match.compatibilityScore}
+                {match.compatibilityScore ?? match.idealMatchScore ?? "-"}
               </div>
               <div>
-                <p className="text-sm font-medium">궁합 {match.compatibilityScore}점</p>
+                <p className="text-sm font-medium">
+                  궁합 {match.compatibilityScore ?? match.idealMatchScore ?? "-"}점
+                  {match.compatibilityScore == null && match.idealMatchScore != null && (
+                    <span className="ml-1 text-[10px] text-[var(--muted-foreground)]">(예상)</span>
+                  )}
+                </p>
                 <p className="text-xs text-[var(--muted-foreground)]">
                   {new Date(match.createdAt).toLocaleDateString("ko-KR")}
                 </p>

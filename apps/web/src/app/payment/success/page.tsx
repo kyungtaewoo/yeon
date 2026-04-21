@@ -4,14 +4,18 @@ import { Suspense, useEffect, useState } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { apiClient } from "@/lib/api";
+import { useAuthStore } from "@/stores/authStore";
 
 export default function PaymentSuccessPage() {
   return (
-    <Suspense fallback={
-      <div className="flex min-h-screen items-center justify-center bg-[var(--background)]">
-        <p className="text-[var(--muted-foreground)]">결제 확인 중...</p>
-      </div>
-    }>
+    <Suspense
+      fallback={
+        <div className="flex min-h-screen items-center justify-center bg-[var(--background)]">
+          <p className="text-[var(--muted-foreground)]">결제 확인 중...</p>
+        </div>
+      }
+    >
       <PaymentSuccessContent />
     </Suspense>
   );
@@ -27,35 +31,41 @@ function PaymentSuccessContent() {
     const paymentKey = searchParams.get("paymentKey");
     const orderId = searchParams.get("orderId");
     const amount = searchParams.get("amount");
+    const token = useAuthStore.getState().token;
 
     if (!paymentKey || !orderId || !amount) {
       setStatus("error");
       setErrorMessage("결제 정보가 올바르지 않습니다");
       return;
     }
+    if (!token) {
+      setStatus("error");
+      setErrorMessage("로그인 세션이 만료되었습니다. 다시 로그인해주세요.");
+      return;
+    }
 
-    const confirm = async () => {
-      const res = await fetch("/api/payment/confirm", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          paymentKey,
-          orderId,
-          amount: Number(amount),
-        }),
-      });
-
-      const data = await res.json();
-
-      if (res.ok) {
+    const run = async () => {
+      try {
+        // 1. 토스 결제 승인
+        await apiClient("/payment/confirm", {
+          method: "POST",
+          token,
+          body: { paymentKey, orderId, amount: Number(amount) },
+        });
+        // 2. 구독 활성화 (User.isPremium=true)
+        await apiClient("/payment/subscription", {
+          method: "POST",
+          token,
+          body: { orderId },
+        });
         setStatus("success");
-      } else {
+      } catch (err: any) {
+        console.error("결제 후처리 실패:", err);
         setStatus("error");
-        setErrorMessage(data.error || "결제 승인에 실패했습니다");
+        setErrorMessage(err?.message ?? "결제 처리에 실패했습니다");
       }
     };
-
-    confirm();
+    run();
   }, [searchParams]);
 
   return (
@@ -69,7 +79,7 @@ function PaymentSuccessContent() {
                   緣
                 </p>
               </div>
-              <p className="text-[var(--muted-foreground)]">결제 승인 중...</p>
+              <p className="text-[var(--muted-foreground)]">결제 승인 + 구독 활성화 중...</p>
             </>
           )}
 
@@ -81,16 +91,16 @@ function PaymentSuccessContent() {
                 </svg>
               </div>
               <h1 className="font-[family-name:var(--font-serif)] text-xl text-[var(--foreground)]">
-                결제가 완료되었습니다!
+                프리미엄 구독이 활성화되었습니다!
               </h1>
               <p className="text-sm text-[var(--muted-foreground)]">
-                매칭 상대의 프로필을 확인하실 수 있습니다
+                이제 모든 궁합 리포트와 Top 30 이상형을 확인하실 수 있습니다
               </p>
               <Button
-                onClick={() => router.push("/matches")}
+                onClick={() => router.push("/premium")}
                 className="w-full bg-[var(--brand-red)] text-white py-5"
               >
-                매칭 확인하기
+                구독 현황 보기
               </Button>
             </>
           )}
@@ -108,11 +118,11 @@ function PaymentSuccessContent() {
               </h1>
               <p className="text-sm text-[var(--element-fire)]">{errorMessage}</p>
               <Button
-                onClick={() => router.push("/matches")}
+                onClick={() => router.push("/premium")}
                 variant="outline"
                 className="w-full py-5"
               >
-                매칭으로 돌아가기
+                프리미엄 페이지로
               </Button>
             </>
           )}
