@@ -53,7 +53,7 @@
 				<string>yeonapp</string>
 			</array>
 			<key>CFBundleURLName</key>
-			<string>com.yeon.app</string>
+			<string>com.woopitel.yeon</string>
 		</dict>
 	</array>
 	<key>NSAppTransportSecurity</key>

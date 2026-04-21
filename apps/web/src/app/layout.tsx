@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import "./globals.css";
 import { ServiceWorkerRegister } from "@/components/shared/ServiceWorkerRegister";
+import { NativeBridge } from "@/components/shared/NativeBridge";
 
 export const metadata: Metadata = {
   title: "緣 (연) — 사주궁합 매칭",
@@ -46,6 +47,7 @@ export default function RootLayout({
       </head>
       <body className="min-h-full flex flex-col" style={{ fontFamily: "var(--font-sans)" }}>
         <ServiceWorkerRegister />
+        <NativeBridge />
         {children}
       </body>
     </html>
