@@ -10,6 +10,10 @@ async function bootstrap() {
     .map((s) => s.trim())
     .filter(Boolean);
 
+  // Capacitor 네이티브 앱은 capacitor://localhost (iOS) / http://localhost (Android) origin 사용.
+  // env 설정과 무관하게 항상 허용.
+  origins.push('capacitor://localhost', 'http://localhost');
+
   app.enableCors({
     origin: origins,
     credentials: true,
