@@ -55,24 +55,12 @@ export class AuthController {
         );
       }
 
-      const appUrl = `yeonapp://auth?token=${result.accessToken}&isNew=${result.isNewUser}`;
-      const webFallback = `${frontendUrl}/callback?token=${result.accessToken}&isNew=${result.isNewUser}`;
-
-      res.send(`
-        <html>
-        <head><title>로그인 완료</title></head>
-        <body style="font-family:sans-serif;text-align:center;padding:60px 20px;">
-          <h2>로그인 성공!</h2>
-          <p>앱으로 돌아가는 중...</p>
-          <script>
-            window.location.href = '${appUrl}';
-            setTimeout(function() {
-              window.location.href = '${webFallback}';
-            }, 3000);
-          </script>
-        </body>
-        </html>
-      `);
+      // 네이티브 앱: HTTP 302 로 yeonapp:// 에 직접 리다이렉트.
+      // JS window.location 방식은 SFSafariViewController 에서 custom URL scheme 을 못 잡음.
+      // 302 Location 헤더는 iOS 가 확실히 scheme 으로 인식 → Capacitor 앱 foreground + appUrlOpen 발화.
+      return res.redirect(
+        `yeonapp://auth?token=${result.accessToken}&isNew=${result.isNewUser}`,
+      );
     } catch (error: any) {
       res.status(400).send(`
         <html>
