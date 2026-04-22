@@ -91,7 +91,7 @@ export default function SajuInputPage() {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-[var(--background)] px-4 py-8">
+    <div className="min-h-screen bg-[var(--background)] px-4 pt-12 pb-8 flex justify-center">
       <Card className="w-full max-w-md border-none shadow-lg">
         <CardContent className="pt-6 space-y-5">
           {/* 뒤로가기 */}

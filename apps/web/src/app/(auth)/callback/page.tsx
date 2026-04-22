@@ -14,10 +14,13 @@ function CallbackInner() {
     const isNew = searchParams.get("isNew") === "true";
     const code = searchParams.get("code");
 
+    console.log("[Callback] mount", { hasToken: !!token, isNew, hasCode: !!code });
+
     // 새 플로우: 백엔드가 ?token=&isNew= 로 리다이렉트한 경우
     if (token) {
       const handleTokenRedirect = async () => {
         try {
+          console.log("[Callback] fetching /auth/me");
           const user = await apiClient<{
             id: string;
             nickname: string;
@@ -25,16 +28,19 @@ function CallbackInner() {
             isOnboardingComplete: boolean;
             isPremium: boolean;
           }>('/auth/me', { token });
+          console.log("[Callback] /auth/me ok", {
+            id: user.id,
+            isOnboardingComplete: user.isOnboardingComplete,
+          });
 
           useAuthStore.getState().setAuth(token, user);
+          console.log("[Callback] setAuth done, store token present:", !!useAuthStore.getState().token);
 
-          if (isNew || !user.isOnboardingComplete) {
-            router.replace("/saju-input");
-          } else {
-            router.replace("/home");
-          }
+          const target = isNew || !user.isOnboardingComplete ? "/saju-input" : "/home";
+          console.log("[Callback] routing to", target);
+          router.replace(target);
         } catch (error) {
-          console.error("Auth callback error:", error);
+          console.error("[Callback] token flow error:", error);
           router.replace("/login");
         }
       };

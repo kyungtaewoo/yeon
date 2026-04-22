@@ -7,7 +7,6 @@ import { Badge } from "@/components/ui/badge";
 import { useOnboardingStore } from "@/stores/onboardingStore";
 import { STEM_KOREAN, BRANCH_KOREAN, ELEMENT_NAMES, STEM_TO_ELEMENT, BRANCH_TO_ELEMENT } from "@/lib/saju/constants";
 import type { Pillar, Element, TenGod, TenGodGroup, TenGodDistribution, PillarTenGods } from "@/lib/saju/types";
-import { SajuCard } from "@/components/saju/SajuCard";
 
 const ELEMENT_COLORS: Record<Element, string> = {
   wood: "var(--element-wood)",
@@ -330,13 +329,6 @@ export default function SajuReportPage() {
             </CardContent>
           </Card>
         ))}
-
-        {/* 사주 카드 공유 */}
-        <SajuCard
-          pillars={pillars}
-          elementScores={report.elementScores}
-          dominantElement={report.dominantElement}
-        />
 
         {/* CTA */}
         <Button

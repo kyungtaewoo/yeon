@@ -10,9 +10,12 @@ export default function LoginPage() {
   const router = useRouter();
 
   const handleKakaoLogin = () => {
-    // NestJS 서버의 카카오 리다이렉트 엔드포인트로 이동
-    // 서버가 카카오 → 콜백 → JWT 발급 → 앱으로 돌려보냄
-    window.location.href = `${API_URL}/auth/kakao/redirect`;
+    // Capacitor 네이티브 앱이면 ?from=app 을 붙여 서버가 yeonapp:// 로 돌려보내도록 신호
+    const cap = (window as unknown as { Capacitor?: { isNativePlatform?: () => boolean } }).Capacitor;
+    const isNative = cap?.isNativePlatform?.() ?? false;
+    const query = isNative ? "?from=app" : "";
+    console.log("[Login] kakao redirect", { isNative, url: `${API_URL}/auth/kakao/redirect${query}` });
+    window.location.href = `${API_URL}/auth/kakao/redirect${query}`;
   };
 
   const handleDemoMode = () => {

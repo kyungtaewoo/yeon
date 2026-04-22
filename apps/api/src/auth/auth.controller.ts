@@ -1,5 +1,5 @@
-import { Controller, Post, Get, Body, Query, Res, Req, UseGuards, Request } from '@nestjs/common';
-import type { Request as ExpressRequest, Response } from 'express';
+import { Controller, Post, Get, Body, Query, Res, UseGuards, Request } from '@nestjs/common';
+import type { Response } from 'express';
 import { ConfigService } from '@nestjs/config';
 import { AuthService } from './auth.service';
 import { JwtAuthGuard } from './guards/jwt-auth.guard';
@@ -20,12 +20,14 @@ export class AuthController {
   /**
    * GET /auth/kakao/redirect — 카카오 로그인 페이지로 리다이렉트
    * Capacitor 앱에서 시스템 Safari로 이 URL을 연다
+   * ?from=app 이면 OAuth state=app 으로 전달 → 콜백에서 네이티브 앱 분기용
    */
   @Get('kakao/redirect')
-  kakaoRedirect(@Res() res: Response) {
+  kakaoRedirect(@Query('from') from: string | undefined, @Res() res: Response) {
     const clientId = this.config.get('KAKAO_CLIENT_ID');
     const callbackUrl = this.config.get('KAKAO_CALLBACK_URL');
-    const kakaoUrl = `https://kauth.kakao.com/oauth/authorize?client_id=${clientId}&redirect_uri=${encodeURIComponent(callbackUrl)}&response_type=code`;
+    const stateParam = from === 'app' ? `&state=app` : '';
+    const kakaoUrl = `https://kauth.kakao.com/oauth/authorize?client_id=${clientId}&redirect_uri=${encodeURIComponent(callbackUrl)}&response_type=code${stateParam}`;
     res.redirect(kakaoUrl);
   }
 
@@ -36,7 +38,7 @@ export class AuthController {
   @Get('kakao/callback')
   async kakaoCallback(
     @Query('code') code: string,
-    @Req() req: ExpressRequest,
+    @Query('state') state: string | undefined,
     @Res() res: Response,
   ) {
     try {
@@ -44,9 +46,8 @@ export class AuthController {
       const result = await this.authService.kakaoLogin(code, callbackUrl!);
 
       const frontendUrl = this.config.get('FRONTEND_URL', 'http://localhost:3001');
-      const userAgent = req.headers['user-agent'] ?? '';
-      // Capacitor 앱은 시스템 Safari로 OAuth를 열기 때문에 콜백은 모바일 브라우저에서 발생
-      const isNativeApp = /iPhone|iPad|iPod|Android/i.test(userAgent);
+      // kakaoRedirect에서 ?from=app 으로 진입하면 state=app 으로 돌아옴 (OAuth state 파라미터)
+      const isNativeApp = state === 'app';
 
       if (!isNativeApp) {
         return res.redirect(

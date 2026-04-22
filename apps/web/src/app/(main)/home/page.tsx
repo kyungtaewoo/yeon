@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -20,7 +20,7 @@ interface MatchSummary {
   createdAt: string;
 }
 
-export default function HomePage() {
+function HomeInner() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { user, token, loading: authLoading } = useAuth();
@@ -288,5 +288,21 @@ export default function HomePage() {
         </Card>
       </div>
     </div>
+  );
+}
+
+export default function HomePage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="px-4 py-6">
+          <div className="mx-auto max-w-md text-center py-20">
+            <p className="text-[var(--muted-foreground)]">로딩 중...</p>
+          </div>
+        </div>
+      }
+    >
+      <HomeInner />
+    </Suspense>
   );
 }
