@@ -178,8 +178,13 @@ export class PaymentService {
    * 이상형 재탐색 쿼터 소모 — 프리미엄은 무제한 통과,
    * 무료는 Subscription.idealSearchRemaining 차감 (없으면 기본 1로 시작).
    * 쿼터 소진 시 403.
+   *
+   * TestFlight 단계에서는 ENABLE_IDEAL_QUOTA 가 true 가 아니면 쿼터 체크를 건너뛴다.
+   * 프리미엄 플로우 정식 출시 시 env 로 활성화.
    */
   async consumeIdealSearch(userId: string): Promise<void> {
+    if (process.env.ENABLE_IDEAL_QUOTA !== 'true') return;
+
     const user = await this.userRepo.findOne({ where: { id: userId } });
     if (!user) throw new NotFoundException('유저를 찾을 수 없습니다');
 

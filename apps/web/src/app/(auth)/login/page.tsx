@@ -20,10 +20,6 @@ export default function LoginPage() {
     window.location.href = url;
   };
 
-  const handleDemoMode = () => {
-    router.push("/saju-input");
-  };
-
   return (
     <div className="flex min-h-screen items-center justify-center bg-[var(--background)] px-4">
       <Card className="w-full max-w-sm border-none shadow-lg">
@@ -49,14 +45,6 @@ export default function LoginPage() {
             className="w-full bg-[#FEE500] text-[#191919] hover:bg-[#FDD835] font-medium text-base py-6"
           >
             카카오로 시작하기
-          </Button>
-          <Button
-            type="button"
-            onClick={handleDemoMode}
-            variant="outline"
-            className="w-full border-[var(--brand-gold)] text-[var(--brand-gold)] hover:bg-[var(--brand-gold)] hover:text-white font-medium text-base py-6"
-          >
-            로그인 없이 체험하기
           </Button>
           <p className="text-center text-sm text-[var(--muted-foreground)]">
             로그인 시{" "}

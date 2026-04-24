@@ -8,8 +8,6 @@ import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Slider } from "@/components/ui/slider";
 import { useOnboardingStore } from "@/stores/onboardingStore";
 import type { CompatibilityWeights } from "@/lib/saju/types";
-import { calculatePillars } from "@/lib/saju/pillars";
-import { findIdealMatchesV2 } from "@/lib/saju/reverseMatch-v2";
 import type { IdealMatchProfileV2 } from "@/lib/saju/reverseMatch-v2";
 import { apiClient, ApiError } from "@/lib/api";
 import { useAuthStore } from "@/stores/authStore";
@@ -52,7 +50,6 @@ export default function PreferencesPage() {
   const router = useRouter();
   const {
     weights: storedWeights, setWeights, setAgeRange,
-    birthYear, birthMonth, birthDay, birthHour, isLunar, gender,
     preferredAgeMin, preferredAgeMax,
   } = useOnboardingStore();
   const [weights, setLocalWeights] = useState<CompatibilityWeights>(storedWeights);
@@ -69,43 +66,38 @@ export default function PreferencesPage() {
   };
 
   const handleSubmit = async () => {
+    const token = useAuthStore.getState().token;
+
+    // 온보딩 레이아웃에서 이미 토큰 없으면 /login 으로 리다이렉트하지만,
+    // 스토어 동기화 타이밍 등의 엣지 케이스 방어용 2차 게이트.
+    if (!token) {
+      toast.error("로그인이 필요해요", {
+        description: "이상적 상대를 찾으려면 먼저 로그인해주세요.",
+        action: {
+          label: "로그인하러 가기",
+          onClick: () => navigateHard("/login"),
+        },
+      });
+      return;
+    }
+
     setLoading(true);
     setWeights(weights);
     setAgeRange(ageRange[0], ageRange[1]);
 
     try {
-      const token = useAuthStore.getState().token;
+      // 백엔드가 이상형 탐색 + 저장 + 매칭 스캔까지 수행
+      await apiClient('/users/me', {
+        method: 'PATCH',
+        token,
+        body: { preferredAgeMin: ageRange[0], preferredAgeMax: ageRange[1] },
+      });
 
-      if (token) {
-        // 로그인 상태: 백엔드가 이상형 탐색 + 저장 + 매칭 스캔까지 수행
-        await apiClient('/users/me', {
-          method: 'PATCH',
-          token,
-          body: { preferredAgeMin: ageRange[0], preferredAgeMax: ageRange[1] },
-        });
-
-        const res = await apiClient<{ profiles: { profile: IdealMatchProfileV2 }[] }>(
-          '/matching/find-ideal',
-          { method: 'POST', token, body: { weights, topN: 10 } },
-        );
-        useOnboardingStore.getState().setIdealProfiles(res.profiles.map((p) => p.profile));
-      } else {
-        // 데모 모드: 로컬 계산
-        const pillars = calculatePillars({
-          year: Number(birthYear),
-          month: Number(birthMonth),
-          day: Number(birthDay),
-          hour: birthHour,
-          isLunar,
-        });
-        const results = findIdealMatchesV2({
-          mySaju: pillars,
-          weights,
-          ageRange: { min: ageRange[0], max: ageRange[1] },
-          topN: 10,
-        });
-        useOnboardingStore.getState().setIdealProfiles(results);
-      }
+      const res = await apiClient<{ profiles: { profile: IdealMatchProfileV2 }[] }>(
+        '/matching/find-ideal',
+        { method: 'POST', token, body: { weights, topN: 10 } },
+      );
+      useOnboardingStore.getState().setIdealProfiles(res.profiles.map((p) => p.profile));
 
       // Capacitor 정적 빌드에서 router.push 가 간헐적으로 실패 →
       // window.location.href 로 하드 내비. 트레일링 슬래시는 iOS trailingSlash:true 대응.
@@ -114,17 +106,7 @@ export default function PreferencesPage() {
       console.error("이상적 상대 탐색 에러:", e);
       setLoading(false);
 
-      if (e instanceof ApiError && e.status === 403) {
-        // 무료 쿼터 소진 — 프리미엄 유도
-        toast.error("무료 이상형 탐색 횟수를 모두 사용했어요", {
-          description: "프리미엄 구독 시 무제한으로 이용할 수 있습니다.",
-          action: {
-            label: "프리미엄 보기",
-            onClick: () => navigateHard("/premium"),
-          },
-          duration: 8000,
-        });
-      } else if (e instanceof ApiError && e.status === 401) {
+      if (e instanceof ApiError && e.status === 401) {
         toast.error("로그인이 만료됐어요", {
           description: "다시 로그인한 뒤 시도해주세요.",
           action: {
