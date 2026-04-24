@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import "./globals.css";
 import { ServiceWorkerRegister } from "@/components/shared/ServiceWorkerRegister";
 import { NativeBridge } from "@/components/shared/NativeBridge";
+import { Toaster } from "@/components/ui/sonner";
 
 export const metadata: Metadata = {
   title: "緣 (연) — 사주궁합 매칭",
@@ -49,6 +50,7 @@ export default function RootLayout({
         <ServiceWorkerRegister />
         <NativeBridge />
         {children}
+        <Toaster position="top-center" richColors />
       </body>
     </html>
   );

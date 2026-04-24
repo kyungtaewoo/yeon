@@ -2,6 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useState } from "react";
+import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Slider } from "@/components/ui/slider";
@@ -10,8 +11,21 @@ import type { CompatibilityWeights } from "@/lib/saju/types";
 import { calculatePillars } from "@/lib/saju/pillars";
 import { findIdealMatchesV2 } from "@/lib/saju/reverseMatch-v2";
 import type { IdealMatchProfileV2 } from "@/lib/saju/reverseMatch-v2";
-import { apiClient } from "@/lib/api";
+import { apiClient, ApiError } from "@/lib/api";
 import { useAuthStore } from "@/stores/authStore";
+
+// Capacitor 정적 빌드는 trailingSlash:true → /path/index.html 로 export.
+// window.location.href 로 하드 내비할 때 iOS 에서는 trailing slash 를 붙여야 안전.
+function isCapacitor(): boolean {
+  if (typeof window === "undefined") return false;
+  const cap = (window as unknown as { Capacitor?: { isNativePlatform?: () => boolean } }).Capacitor;
+  return cap?.isNativePlatform?.() ?? false;
+}
+
+function navigateHard(path: string) {
+  const withSlash = isCapacitor() && !path.endsWith("/") ? `${path}/` : path;
+  window.location.href = withSlash;
+}
 
 const CATEGORIES: Array<{
   key: keyof CompatibilityWeights;
@@ -93,10 +107,45 @@ export default function PreferencesPage() {
         useOnboardingStore.getState().setIdealProfiles(results);
       }
 
-      router.push("/ideal-match");
+      // Capacitor 정적 빌드에서 router.push 가 간헐적으로 실패 →
+      // window.location.href 로 하드 내비. 트레일링 슬래시는 iOS trailingSlash:true 대응.
+      navigateHard("/ideal-match");
     } catch (e) {
       console.error("이상적 상대 탐색 에러:", e);
       setLoading(false);
+
+      if (e instanceof ApiError && e.status === 403) {
+        // 무료 쿼터 소진 — 프리미엄 유도
+        toast.error("무료 이상형 탐색 횟수를 모두 사용했어요", {
+          description: "프리미엄 구독 시 무제한으로 이용할 수 있습니다.",
+          action: {
+            label: "프리미엄 보기",
+            onClick: () => navigateHard("/premium"),
+          },
+          duration: 8000,
+        });
+      } else if (e instanceof ApiError && e.status === 401) {
+        toast.error("로그인이 만료됐어요", {
+          description: "다시 로그인한 뒤 시도해주세요.",
+          action: {
+            label: "로그인",
+            onClick: () => navigateHard("/login"),
+          },
+        });
+      } else if (e instanceof ApiError && e.status === 400) {
+        toast.error("사주 정보가 필요해요", {
+          description: e.message || "먼저 사주를 입력해주세요.",
+          action: {
+            label: "사주 입력",
+            onClick: () => navigateHard("/saju-input"),
+          },
+        });
+      } else {
+        const msg = e instanceof Error ? e.message : "알 수 없는 오류";
+        toast.error("이상형 탐색에 실패했어요", {
+          description: `잠시 후 다시 시도해주세요. (${msg})`,
+        });
+      }
     }
   };
 

@@ -81,7 +81,8 @@
       "Bash(rm -rf .next out)",
       "Bash(CAPACITOR_BUILD=1 npm run build)",
       "Bash(git commit -m 'fix\\(api\\): use HTTP 302 redirect to yeonapp:// for Capacitor flow *)",
-      "Bash(git push *)"
+      "Bash(git push *)",
+      "Bash(git commit *)"
     ]
   }
 }
