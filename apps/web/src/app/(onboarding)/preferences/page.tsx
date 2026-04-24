@@ -93,9 +93,11 @@ export default function PreferencesPage() {
         body: { preferredAgeMin: ageRange[0], preferredAgeMax: ageRange[1] },
       });
 
+      // find-ideal 은 서버에서 43,200 combinations 를 brute-force 스캔 →
+      // 현재 평균 30~40s 소요. 기본 60s 타임아웃으론 빠듯해 120s 로 넉넉히 부여.
       const res = await apiClient<{ profiles: { profile: IdealMatchProfileV2 }[] }>(
         '/matching/find-ideal',
-        { method: 'POST', token, body: { weights, topN: 10 } },
+        { method: 'POST', token, body: { weights, topN: 10 }, timeoutMs: 120000 },
       );
       useOnboardingStore.getState().setIdealProfiles(res.profiles.map((p) => p.profile));
 

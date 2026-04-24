@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import { persist } from 'zustand/middleware';
 import type { FourPillars, SajuReport, CompatibilityWeights } from '@/lib/saju/types';
 import type { IdealMatchProfileV2 } from '@/lib/saju/reverseMatch-v2';
 
@@ -48,36 +49,12 @@ const defaultWeights: CompatibilityWeights = {
   personality: 50,
 };
 
-export const useOnboardingStore = create<OnboardingState>((set) => ({
-  birthYear: null,
-  birthMonth: null,
-  birthDay: null,
-  birthHour: null,
-  isLunar: false,
-  gender: null,
-  pillars: null,
-  report: null,
-  weights: defaultWeights,
-  preferredAgeMin: 25,
-  preferredAgeMax: 35,
-  idealProfiles: [],
-
-  setBirthInfo: (info) =>
-    set({
-      birthYear: info.year,
-      birthMonth: info.month,
-      birthDay: info.day,
-      birthHour: info.hour,
-      isLunar: info.isLunar,
-      gender: info.gender,
-    }),
-
-  setReport: (pillars, report) => set({ pillars, report }),
-  setWeights: (weights) => set({ weights }),
-  setAgeRange: (min, max) => set({ preferredAgeMin: min, preferredAgeMax: max }),
-  setIdealProfiles: (profiles) => set({ idealProfiles: profiles }),
-  reset: () =>
-    set({
+// Capacitor 정적 빌드에선 화면 전환을 window.location.href 로 하드 내비로 처리하는데,
+// 이때 메모리 스토어가 초기화되므로 idealProfiles 등이 날아감.
+// localStorage 에 persist 해서 풀 리로드 후에도 결과가 유지되도록 함.
+export const useOnboardingStore = create<OnboardingState>()(
+  persist(
+    (set) => ({
       birthYear: null,
       birthMonth: null,
       birthDay: null,
@@ -90,5 +67,37 @@ export const useOnboardingStore = create<OnboardingState>((set) => ({
       preferredAgeMin: 25,
       preferredAgeMax: 35,
       idealProfiles: [],
+
+      setBirthInfo: (info) =>
+        set({
+          birthYear: info.year,
+          birthMonth: info.month,
+          birthDay: info.day,
+          birthHour: info.hour,
+          isLunar: info.isLunar,
+          gender: info.gender,
+        }),
+
+      setReport: (pillars, report) => set({ pillars, report }),
+      setWeights: (weights) => set({ weights }),
+      setAgeRange: (min, max) => set({ preferredAgeMin: min, preferredAgeMax: max }),
+      setIdealProfiles: (profiles) => set({ idealProfiles: profiles }),
+      reset: () =>
+        set({
+          birthYear: null,
+          birthMonth: null,
+          birthDay: null,
+          birthHour: null,
+          isLunar: false,
+          gender: null,
+          pillars: null,
+          report: null,
+          weights: defaultWeights,
+          preferredAgeMin: 25,
+          preferredAgeMax: 35,
+          idealProfiles: [],
+        }),
     }),
-}));
+    { name: 'yeon-onboarding' },
+  ),
+);
