@@ -8,8 +8,6 @@ import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Slider } from "@/components/ui/slider";
 import { useOnboardingStore } from "@/stores/onboardingStore";
 import type { CompatibilityWeights } from "@/lib/saju/types";
-import type { IdealMatchProfileV2 } from "@/lib/saju/reverseMatch-v2";
-import { apiClient, ApiError } from "@/lib/api";
 import { useAuthStore } from "@/stores/authStore";
 
 // Capacitor 정적 빌드는 trailingSlash:true → /path/index.html 로 export.
@@ -65,7 +63,7 @@ export default function PreferencesPage() {
     setLocalWeights(preset);
   };
 
-  const handleSubmit = async () => {
+  const handleSubmit = () => {
     const token = useAuthStore.getState().token;
 
     // 온보딩 레이아웃에서 이미 토큰 없으면 /login 으로 리다이렉트하지만,
@@ -85,52 +83,9 @@ export default function PreferencesPage() {
     setWeights(weights);
     setAgeRange(ageRange[0], ageRange[1]);
 
-    try {
-      // 백엔드가 이상형 탐색 + 저장 + 매칭 스캔까지 수행
-      await apiClient('/users/me', {
-        method: 'PATCH',
-        token,
-        body: { preferredAgeMin: ageRange[0], preferredAgeMax: ageRange[1] },
-      });
-
-      // find-ideal 은 서버에서 43,200 combinations 를 brute-force 스캔 →
-      // 현재 평균 30~40s 소요. 기본 60s 타임아웃으론 빠듯해 120s 로 넉넉히 부여.
-      const res = await apiClient<{ profiles: { profile: IdealMatchProfileV2 }[] }>(
-        '/matching/find-ideal',
-        { method: 'POST', token, body: { weights, topN: 10 }, timeoutMs: 120000 },
-      );
-      useOnboardingStore.getState().setIdealProfiles(res.profiles.map((p) => p.profile));
-
-      // Capacitor 정적 빌드에서 router.push 가 간헐적으로 실패 →
-      // window.location.href 로 하드 내비. 트레일링 슬래시는 iOS trailingSlash:true 대응.
-      navigateHard("/ideal-match");
-    } catch (e) {
-      console.error("이상적 상대 탐색 에러:", e);
-      setLoading(false);
-
-      if (e instanceof ApiError && e.status === 401) {
-        toast.error("로그인이 만료됐어요", {
-          description: "다시 로그인한 뒤 시도해주세요.",
-          action: {
-            label: "로그인",
-            onClick: () => navigateHard("/login"),
-          },
-        });
-      } else if (e instanceof ApiError && e.status === 400) {
-        toast.error("사주 정보가 필요해요", {
-          description: e.message || "먼저 사주를 입력해주세요.",
-          action: {
-            label: "사주 입력",
-            onClick: () => navigateHard("/saju-input"),
-          },
-        });
-      } else {
-        const msg = e instanceof Error ? e.message : "알 수 없는 오류";
-        toast.error("이상형 탐색에 실패했어요", {
-          description: `잠시 후 다시 시도해주세요. (${msg})`,
-        });
-      }
-    }
+    // 실제 API 호출/탐색 대기 UI 는 /matching 에서 담당.
+    // 이 페이지는 네비게이션이 시작되는 찰나 동안만 로딩 표시.
+    navigateHard("/matching");
   };
 
   return (

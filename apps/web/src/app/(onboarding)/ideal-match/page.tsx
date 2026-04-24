@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -209,6 +209,33 @@ export default function IdealMatchPage() {
   const router = useRouter();
   const { idealProfiles } = useOnboardingStore();
   const [showAll, setShowAll] = useState(false);
+
+  // zustand persist hydration race 방어 — 하드 내비로 들어온 직후 첫 렌더 시
+  // localStorage 로부터 복원 전이라 idealProfiles 가 잠시 [] 일 수 있음.
+  // hasHydrated() 가 true 되기 전엔 빈 화면 분기를 타지 않도록 대기. (SSR 미스매치
+  // 방지를 위해 초기값은 false 로 고정하고 useEffect 안에서만 갱신.)
+  const [hydrated, setHydrated] = useState(false);
+  useEffect(() => {
+    if (useOnboardingStore.persist.hasHydrated()) {
+      setHydrated(true);
+      return;
+    }
+    const unsub = useOnboardingStore.persist.onFinishHydration(() => setHydrated(true));
+    return unsub;
+  }, []);
+
+  if (!hydrated) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-[var(--background)]">
+        <div className="text-center">
+          <h1 className="font-[family-name:var(--font-serif)] text-4xl text-[var(--brand-red)] animate-pulse">
+            緣
+          </h1>
+          <p className="mt-4 text-[var(--muted-foreground)]">결과 불러오는 중...</p>
+        </div>
+      </div>
+    );
+  }
 
   if (idealProfiles.length === 0) {
     return (

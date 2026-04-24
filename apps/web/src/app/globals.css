@@ -91,6 +91,8 @@ button, [role="button"], a, input, select, textarea {
   --brand-gold-light: #e8d5a0;
   --brand-red: #8b2f3a;
   --brand-rose: #c4757e;
+  --brand-purple: #6b5b8f;
+  --brand-purple-light: #a897c7;
 
   /* 오행 색상 */
   --element-wood: #4a7c59;
