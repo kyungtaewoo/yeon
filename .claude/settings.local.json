@@ -79,7 +79,9 @@
       "Bash(NEXT_PUBLIC_API_URL=http://43.202.240.51/api npm run build)",
       "Bash(git check-ignore *)",
       "Bash(rm -rf .next out)",
-      "Bash(CAPACITOR_BUILD=1 npm run build)"
+      "Bash(CAPACITOR_BUILD=1 npm run build)",
+      "Bash(git commit -m 'fix\\(api\\): use HTTP 302 redirect to yeonapp:// for Capacitor flow *)",
+      "Bash(git push *)"
     ]
   }
 }

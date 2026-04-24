@@ -5,7 +5,10 @@ import type { NextConfig } from "next";
 const isCapacitorBuild = process.env.CAPACITOR_BUILD === '1';
 
 const nextConfig: NextConfig = {
-  ...(isCapacitorBuild ? { output: 'export' as const } : {}),
+  // Capacitor: trailingSlash 를 켜서 /route/index.html 형태로 export →
+  // WKWebView 가 directory 요청을 index.html 로 자연스럽게 resolve.
+  // Vercel 빌드는 이 옵션 없이 서버 렌더 유지.
+  ...(isCapacitorBuild ? { output: 'export' as const, trailingSlash: true } : {}),
 
   async headers() {
     return [

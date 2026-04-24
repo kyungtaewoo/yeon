@@ -125,6 +125,16 @@ function ProfileCard({ profile }: { profile: IdealMatchProfileV2 }) {
           </div>
         </div>
 
+        {/* 대표 생년월일시 — 이 사주에 해당하는 실제 생일 예시 */}
+        {profile.matchingDates.length > 0 && (
+          <div className="text-center text-xs text-[var(--muted-foreground)] -mt-1">
+            예: <span className="font-medium text-[var(--foreground)]">
+              {profile.matchingDates[0].date}
+            </span> ({profile.matchingDates[0].dayOfWeek}){" "}
+            {profile.matchingDates[0].hour}생 · 만 {profile.matchingDates[0].age}세
+          </div>
+        )}
+
         {/* 성향 요약 */}
         <p className="text-sm text-[var(--muted-foreground)] leading-relaxed">
           {profile.description.personality}

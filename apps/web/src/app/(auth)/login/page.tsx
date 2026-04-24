@@ -10,12 +10,14 @@ export default function LoginPage() {
   const router = useRouter();
 
   const handleKakaoLogin = () => {
-    // Capacitor 네이티브 앱이면 ?from=app 을 붙여 서버가 yeonapp:// 로 돌려보내도록 신호
     const cap = (window as unknown as { Capacitor?: { isNativePlatform?: () => boolean } }).Capacitor;
     const isNative = cap?.isNativePlatform?.() ?? false;
-    const query = isNative ? "?from=app" : "";
-    console.log("[Login] kakao redirect", { isNative, url: `${API_URL}/auth/kakao/redirect${query}` });
-    window.location.href = `${API_URL}/auth/kakao/redirect${query}`;
+    const url = `${API_URL}/auth/kakao/redirect${isNative ? "?from=app" : ""}`;
+    console.log("[Login] kakao redirect", { isNative, url });
+    // Capacitor: 외부 URL 로 이동하면 iOS bridge 가 시스템 Safari 로 열어줌.
+    // SFSafariViewController (Browser.open) 는 yeonapp:// 302 redirect 를 차단하는
+    // 경우가 있어 시스템 Safari 가 가장 안정적.
+    window.location.href = url;
   };
 
   const handleDemoMode = () => {
