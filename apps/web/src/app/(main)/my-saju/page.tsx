@@ -35,6 +35,24 @@ const HOUR_LABELS: Record<number, string> = {
   22: "해시 (21:00~23:00)",
 };
 
+// 서버가 반환하는 raw 사주 프로필. yongshin 은 한글 문자열 ('목' 등) 로
+// 저장돼 있어 Element 타입과 별개. dominantElement 도 안전하게 string 로 받음.
+interface RawSajuProfile {
+  yearStem: HeavenlyStem;
+  yearBranch: EarthlyBranch;
+  monthStem: HeavenlyStem;
+  monthBranch: EarthlyBranch;
+  dayStem: HeavenlyStem;
+  dayBranch: EarthlyBranch;
+  hourStem: HeavenlyStem | null;
+  hourBranch: EarthlyBranch | null;
+  dominantElement: string | null;
+  yongshin: string | null;
+  elementScores: Record<Element, number> | null;
+  reportData: Record<string, string> | null;
+}
+
+// 정규화 후 화면에서 쓰는 형태
 interface SajuProfile {
   yearStem: HeavenlyStem;
   yearBranch: EarthlyBranch;
@@ -51,7 +69,7 @@ interface SajuProfile {
 }
 
 interface SajuReportResponse {
-  profile: SajuProfile;
+  profile: RawSajuProfile;
 }
 
 function PillarCard({ label, stem, branch }: { label: string; stem: HeavenlyStem | null; branch: EarthlyBranch | null }) {
@@ -109,7 +127,7 @@ export default function MySajuPage() {
     report: storeReport,
   } = useOnboardingStore();
 
-  const [serverSaju, setServerSaju] = useState<SajuProfile | null>(null);
+  const [serverSaju, setServerSaju] = useState<RawSajuProfile | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -134,9 +152,24 @@ export default function MySajuPage() {
     fetchSaju();
   }, [user, token, authLoading]);
 
+  // 서버는 yongshin 을 한글 ('목', '화'...) 로, store 는 Element ('wood'...) 로
+  // 저장하는 미스매치가 있어 정규화. 알 수 없는 값이면 null.
+  const normalizeElement = (v: unknown): Element | null => {
+    if (!v || typeof v !== "string") return null;
+    if (v in ELEMENT_NAMES) return v as Element;
+    const koToEl = Object.entries(ELEMENT_NAMES).find(([, n]) => n.ko === v || n.hanja === v);
+    return koToEl ? (koToEl[0] as Element) : null;
+  };
+
   // 사주 4기둥/리포트 — 서버 우선, 없으면 데모 store
   const saju = useMemo<SajuProfile | null>(() => {
-    if (serverSaju) return serverSaju;
+    if (serverSaju) {
+      return {
+        ...serverSaju,
+        dominantElement: normalizeElement(serverSaju.dominantElement),
+        yongshin: normalizeElement(serverSaju.yongshin),
+      };
+    }
     if (!storePillars) return null;
     const r = storeReport;
     return {
@@ -148,8 +181,8 @@ export default function MySajuPage() {
       dayBranch: storePillars.day.branch,
       hourStem: storePillars.hour?.stem ?? null,
       hourBranch: storePillars.hour?.branch ?? null,
-      dominantElement: r?.dominantElement ?? null,
-      yongshin: r?.yongshin ?? null,
+      dominantElement: normalizeElement(r?.dominantElement),
+      yongshin: normalizeElement(r?.yongshin),
       elementScores: r?.elementScores ?? null,
       reportData: r
         ? {
