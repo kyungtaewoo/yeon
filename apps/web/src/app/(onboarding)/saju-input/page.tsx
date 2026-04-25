@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -42,6 +42,12 @@ export default function SajuInputPage() {
   const [isLunar, setIsLunar] = useState(storedIsLunar ?? false);
   const [gender, setGender] = useState<"male" | "female" | "">(storedGender || "");
   const [loading, setLoading] = useState(false);
+
+  // 마운트 시 스크롤 최상단으로 — Capacitor 정적 export 환경에선 라우트
+  // 전환 후에도 이전 페이지의 스크롤 위치가 그대로 남는 케이스가 있어 명시.
+  useEffect(() => {
+    window.scrollTo(0, 0);
+  }, []);
 
   const isValid = year && month && day && gender;
 
