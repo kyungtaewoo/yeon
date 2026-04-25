@@ -7,6 +7,7 @@ import { AuthModule } from './auth/auth.module';
 import { SajuModule } from './saju/saju.module';
 import { CompatibilityModule } from './compatibility/compatibility.module';
 import { MatchingModule } from './matching/matching.module';
+import { SavedIdealTargetsModule } from './matching/saved-ideal-targets/saved-ideal-targets.module';
 import { RomanceTimingModule } from './romance-timing/romance-timing.module';
 import { FriendsModule } from './friends/friends.module';
 import { PaymentModule } from './payment/payment.module';
@@ -24,6 +25,7 @@ import { NotificationModule } from './notification/notification.module';
     SajuModule,
     CompatibilityModule,
     MatchingModule,
+    SavedIdealTargetsModule,
     RomanceTimingModule,
     FriendsModule,
     PaymentModule,

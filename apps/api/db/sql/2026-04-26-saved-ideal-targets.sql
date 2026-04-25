@@ -45,8 +45,11 @@ CREATE TABLE "saved_ideal_targets" (
     -- 'matched' 는 Phase 2 예약값. 실제 매칭 참조 컬럼은 Phase 2 에서 ALTER 로 추가.
     "status"        varchar        NOT NULL DEFAULT 'searching',
 
-    "savedAt"       timestamptz    NOT NULL DEFAULT now(),
-    "updatedAt"     timestamptz    NOT NULL DEFAULT now(),
+    -- @CreateDateColumn / @UpdateDateColumn 기본값 — 기존 엔티티들과 동일하게
+    -- timestamp WITHOUT time zone (PG 기본). 향후 timestamptz 통일 마이그레이션은
+    -- 별도 PR 에서 모든 createdAt/updatedAt 을 일괄 변환하는 게 안전.
+    "savedAt"       timestamp      NOT NULL DEFAULT now(),
+    "updatedAt"     timestamp      NOT NULL DEFAULT now(),
 
     CONSTRAINT "PK_saved_ideal_targets" PRIMARY KEY ("id"),
 
