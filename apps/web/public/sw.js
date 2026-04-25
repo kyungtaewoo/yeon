@@ -1,4 +1,9 @@
-const CACHE_NAME = "yeon-v2";
+// Service Worker.
+// Capacitor 네이티브 환경에선 SW 가 capacitor:// 스킴 fetch 를 가로채면서
+// navigate 요청이 잘못된 페이지(랜딩)로 빠지는 사고가 있었음. 이에 대응해
+// Capacitor 환경이면 자기 자신을 unregister 하고 모든 fetch 를 pass-through.
+
+const CACHE_NAME = "yeon-v3";
 const STATIC_ASSETS = [
   "/",
   "/login",
@@ -7,30 +12,57 @@ const STATIC_ASSETS = [
   "/icon-512x512.svg",
 ];
 
-// 설치 시 정적 자산 캐싱
+const IS_CAPACITOR = self.location.protocol === "capacitor:";
+
+// 설치 — Capacitor 면 캐시 안 만들고 즉시 skipWaiting
 self.addEventListener("install", (event) => {
+  self.skipWaiting();
+  if (IS_CAPACITOR) return;
   event.waitUntil(
     caches.open(CACHE_NAME).then((cache) => cache.addAll(STATIC_ASSETS))
   );
-  self.skipWaiting();
 });
 
-// 활성화 시 이전 캐시 삭제
+// 활성화
 self.addEventListener("activate", (event) => {
   event.waitUntil(
-    caches.keys().then((keys) =>
-      Promise.all(
-        keys
-          .filter((key) => key !== CACHE_NAME)
-          .map((key) => caches.delete(key))
-      )
-    )
+    (async () => {
+      await self.clients.claim();
+      if (IS_CAPACITOR) {
+        // Capacitor: 자기 자신 unregister + 캐시 전부 삭제
+        try {
+          const keys = await caches.keys();
+          await Promise.all(keys.map((k) => caches.delete(k)));
+          await self.registration.unregister();
+        } catch (err) {
+          console.error("[SW] capacitor self-cleanup 실패:", err);
+        }
+        // 컨트롤 중인 모든 client 에 reload 요청 — 다음 navigation 부턴 SW 없이.
+        try {
+          const all = await self.clients.matchAll({ includeUncontrolled: true });
+          for (const client of all) {
+            if ("navigate" in client) {
+              client.navigate(client.url).catch(() => {});
+            }
+          }
+        } catch {
+          // ignore
+        }
+        return;
+      }
+      // 웹: 이전 버전 캐시만 삭제
+      const keys = await caches.keys();
+      await Promise.all(
+        keys.filter((k) => k !== CACHE_NAME).map((k) => caches.delete(k))
+      );
+    })()
   );
-  self.clients.claim();
 });
 
-// 네트워크 우선, 실패 시 캐시 (Network First)
+// fetch — Capacitor 면 가로채지 않고 pass-through
 self.addEventListener("fetch", (event) => {
+  if (IS_CAPACITOR) return;
+
   const { request } = event;
 
   // API 요청은 캐시하지 않음
@@ -42,7 +74,6 @@ self.addEventListener("fetch", (event) => {
   event.respondWith(
     fetch(request)
       .then((response) => {
-        // 성공한 응답은 캐시에 저장
         if (response.ok) {
           const clone = response.clone();
           caches.open(CACHE_NAME).then((cache) => cache.put(request, clone));
