@@ -29,7 +29,17 @@ export class AuthController {
     const clientId = this.config.get('KAKAO_CLIENT_ID');
     const callbackUrl = this.config.get('KAKAO_CALLBACK_URL');
     const stateParam = from === 'app' ? `&state=app` : '';
-    const kakaoUrl = `https://kauth.kakao.com/oauth/authorize?client_id=${clientId}&redirect_uri=${encodeURIComponent(callbackUrl)}&response_type=code${stateParam}`;
+    // scope 명시 — 이미 다른 항목에 동의했어도 새로 추가된 항목은 명시해야
+    // 카카오가 동의 화면에 띄움. 콘솔에서 켜둔 것만 의미 있고, 켜져있지
+    // 않은 scope 는 무시됨.
+    const scope = 'profile_nickname';
+    const kakaoUrl =
+      `https://kauth.kakao.com/oauth/authorize` +
+      `?client_id=${clientId}` +
+      `&redirect_uri=${encodeURIComponent(callbackUrl)}` +
+      `&response_type=code` +
+      `&scope=${scope}` +
+      stateParam;
     res.redirect(kakaoUrl);
   }
 
