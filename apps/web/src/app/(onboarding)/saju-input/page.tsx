@@ -27,13 +27,19 @@ const HOUR_OPTIONS = [
 
 export default function SajuInputPage() {
   const router = useRouter();
-  const { setBirthInfo, gender: storedGender } = useOnboardingStore();
+  const {
+    setBirthInfo,
+    birthYear, birthMonth, birthDay, birthHour,
+    isLunar: storedIsLunar,
+    gender: storedGender,
+  } = useOnboardingStore();
 
-  const [year, setYear] = useState("1995");
-  const [month, setMonth] = useState("3");
-  const [day, setDay] = useState("15");
-  const [hour, setHour] = useState<number | null>(null);
-  const [isLunar, setIsLunar] = useState(false);
+  // 기존 입력값이 있으면 그대로 prefill (수정 흐름). 없으면 디폴트.
+  const [year, setYear] = useState(birthYear ? String(birthYear) : "1995");
+  const [month, setMonth] = useState(birthMonth ? String(birthMonth) : "3");
+  const [day, setDay] = useState(birthDay ? String(birthDay) : "15");
+  const [hour, setHour] = useState<number | null>(birthHour ?? null);
+  const [isLunar, setIsLunar] = useState(storedIsLunar ?? false);
   const [gender, setGender] = useState<"male" | "female" | "">(storedGender || "");
   const [loading, setLoading] = useState(false);
 

@@ -1,12 +1,15 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { apiClient } from "@/lib/api";
 import { useAuth } from "@/hooks/useAuth";
-import { STEM_KOREAN, BRANCH_KOREAN, ELEMENT_NAMES, STEM_TO_ELEMENT, BRANCH_TO_ELEMENT } from "@/lib/saju/constants";
+import { useOnboardingStore } from "@/stores/onboardingStore";
+import {
+  STEM_KOREAN, BRANCH_KOREAN, ELEMENT_NAMES, STEM_TO_ELEMENT, BRANCH_TO_ELEMENT,
+} from "@/lib/saju/constants";
 import type { Element, HeavenlyStem, EarthlyBranch } from "@/lib/saju/types";
 
 const ELEMENT_COLORS: Record<Element, string> = {
@@ -15,6 +18,21 @@ const ELEMENT_COLORS: Record<Element, string> = {
   earth: "var(--element-earth)",
   metal: "var(--element-metal)",
   water: "var(--element-water)",
+};
+
+const HOUR_LABELS: Record<number, string> = {
+  0: "자시 (23:00~01:00)",
+  2: "축시 (01:00~03:00)",
+  4: "인시 (03:00~05:00)",
+  6: "묘시 (05:00~07:00)",
+  8: "진시 (07:00~09:00)",
+  10: "사시 (09:00~11:00)",
+  12: "오시 (11:00~13:00)",
+  14: "미시 (13:00~15:00)",
+  16: "신시 (15:00~17:00)",
+  18: "유시 (17:00~19:00)",
+  20: "술시 (19:00~21:00)",
+  22: "해시 (21:00~23:00)",
 };
 
 interface SajuProfile {
@@ -70,16 +88,33 @@ function PillarCard({ label, stem, branch }: { label: string; stem: HeavenlyStem
   );
 }
 
+function InfoRow({ label, value }: { label: string; value: string | null }) {
+  return (
+    <div className="flex items-center justify-between py-2.5 border-b border-[var(--border)] last:border-0">
+      <span className="text-sm text-[var(--muted-foreground)]">{label}</span>
+      <span className="text-sm font-medium text-[var(--foreground)]">
+        {value ?? <span className="text-[var(--muted-foreground)]">미입력</span>}
+      </span>
+    </div>
+  );
+}
+
 export default function MySajuPage() {
   const router = useRouter();
   const { user, token, loading: authLoading } = useAuth();
-  const [saju, setSaju] = useState<SajuProfile | null>(null);
+  const {
+    birthYear, birthMonth, birthDay, birthHour,
+    isLunar, gender,
+    pillars: storePillars,
+    report: storeReport,
+  } = useOnboardingStore();
+
+  const [serverSaju, setServerSaju] = useState<SajuProfile | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     if (authLoading) return;
 
-    // 비로그인 — API 호출 없이 빈 상태로 (사주 입력 안내 화면 보여주기)
     if (!user || !token) {
       setLoading(false);
       return;
@@ -88,7 +123,7 @@ export default function MySajuPage() {
     const fetchSaju = async () => {
       try {
         const res = await apiClient<SajuReportResponse | null>('/saju/report', { token });
-        if (res?.profile) setSaju(res.profile);
+        if (res?.profile) setServerSaju(res.profile);
       } catch (err) {
         console.error("사주 조회 실패:", err);
       } finally {
@@ -98,6 +133,37 @@ export default function MySajuPage() {
 
     fetchSaju();
   }, [user, token, authLoading]);
+
+  // 사주 4기둥/리포트 — 서버 우선, 없으면 데모 store
+  const saju = useMemo<SajuProfile | null>(() => {
+    if (serverSaju) return serverSaju;
+    if (!storePillars) return null;
+    const r = storeReport;
+    return {
+      yearStem: storePillars.year.stem,
+      yearBranch: storePillars.year.branch,
+      monthStem: storePillars.month.stem,
+      monthBranch: storePillars.month.branch,
+      dayStem: storePillars.day.stem,
+      dayBranch: storePillars.day.branch,
+      hourStem: storePillars.hour?.stem ?? null,
+      hourBranch: storePillars.hour?.branch ?? null,
+      dominantElement: r?.dominantElement ?? null,
+      yongshin: r?.yongshin ?? null,
+      elementScores: r?.elementScores ?? null,
+      reportData: r
+        ? {
+            personality: r.personality,
+            romance: r.romance,
+            wealth: r.wealth,
+            health: r.health,
+          }
+        : null,
+    };
+  }, [serverSaju, storePillars, storeReport]);
+
+  const hasBirthInfo = !!(birthYear && birthMonth && birthDay);
+  const editButtonLabel = hasBirthInfo ? "사주 정보 수정" : "사주 입력하기";
 
   if (authLoading || loading) {
     return (
@@ -109,23 +175,6 @@ export default function MySajuPage() {
     );
   }
 
-  if (!saju) {
-    return (
-      <div className="px-4 py-6">
-        <div className="mx-auto max-w-md text-center space-y-4">
-          <p className="text-[var(--muted-foreground)]">사주 정보가 없습니다</p>
-          <Button onClick={() => router.push("/saju-input")} className="bg-[var(--brand-red)] text-white">
-            사주 입력하기
-          </Button>
-        </div>
-      </div>
-    );
-  }
-
-  const elements: Element[] = ["wood", "fire", "earth", "metal", "water"];
-  const scores = saju.elementScores || { wood: 0, fire: 0, earth: 0, metal: 0, water: 0 };
-  const maxScore = Math.max(...elements.map((e) => scores[e] || 0));
-
   return (
     <div className="px-4 py-6">
       <div className="mx-auto max-w-md space-y-6">
@@ -133,89 +182,144 @@ export default function MySajuPage() {
           내 사주
         </h1>
 
-        {/* 사주 4기둥 */}
+        {/* 기본 정보 */}
         <Card className="border-none shadow-lg">
           <CardContent className="pt-6">
-            <div className="grid grid-cols-4 gap-3">
-              <PillarCard label="시주" stem={saju.hourStem} branch={saju.hourBranch} />
-              <PillarCard label="일주" stem={saju.dayStem} branch={saju.dayBranch} />
-              <PillarCard label="월주" stem={saju.monthStem} branch={saju.monthBranch} />
-              <PillarCard label="연주" stem={saju.yearStem} branch={saju.yearBranch} />
+            <h2 className="text-sm font-medium text-[var(--muted-foreground)] mb-2">기본 정보</h2>
+            <div>
+              <InfoRow
+                label="생년월일"
+                value={hasBirthInfo ? `${birthYear}년 ${birthMonth}월 ${birthDay}일` : null}
+              />
+              <InfoRow label="달력" value={hasBirthInfo ? (isLunar ? "음력" : "양력") : null} />
+              <InfoRow label="성별" value={gender ? (gender === "male" ? "남성" : "여성") : null} />
+              <InfoRow
+                label="출생 시간"
+                value={
+                  hasBirthInfo
+                    ? birthHour !== null && birthHour !== undefined
+                      ? HOUR_LABELS[birthHour] ?? "—"
+                      : "모름"
+                    : null
+                }
+              />
             </div>
+            <Button
+              type="button"
+              onClick={() => router.push("/saju-input")}
+              variant="outline"
+              className="mt-4 w-full border-[var(--brand-gold)] text-[var(--brand-gold)] hover:bg-[var(--brand-gold)]/5"
+            >
+              {editButtonLabel}
+            </Button>
           </CardContent>
         </Card>
 
-        {/* 오행 밸런스 */}
-        <Card className="border-none shadow-lg">
-          <CardContent className="pt-6 space-y-3">
-            <h2 className="font-[family-name:var(--font-serif)] text-lg font-bold mb-2">오행 밸런스</h2>
-            {elements.map((el) => (
-              <div key={el} className="flex items-center gap-2">
-                <span className="w-8 text-center text-sm font-bold font-[family-name:var(--font-serif)]" style={{ color: ELEMENT_COLORS[el] }}>
-                  {ELEMENT_NAMES[el].hanja}
-                </span>
-                <div className="flex-1 h-3 bg-[var(--muted)] rounded-full overflow-hidden">
-                  <div
-                    className="h-full rounded-full"
-                    style={{ width: `${maxScore > 0 ? ((scores[el] || 0) / maxScore) * 100 : 0}%`, backgroundColor: ELEMENT_COLORS[el] }}
-                  />
-                </div>
-                <span className="w-8 text-right text-xs text-[var(--muted-foreground)]">{scores[el] || 0}</span>
-              </div>
-            ))}
-          </CardContent>
-        </Card>
-
-        {/* 용신 & 주요 오행 */}
-        <div className="grid grid-cols-2 gap-3">
-          {saju.dominantElement && (
-            <Card className="border-none shadow-sm">
-              <CardContent className="pt-4 text-center">
-                <p className="text-xs text-[var(--muted-foreground)]">주요 오행</p>
-                <p className="text-2xl font-bold font-[family-name:var(--font-serif)] mt-1" style={{ color: ELEMENT_COLORS[saju.dominantElement] }}>
-                  {ELEMENT_NAMES[saju.dominantElement].hanja}
-                </p>
-                <p className="text-xs text-[var(--muted-foreground)]">{ELEMENT_NAMES[saju.dominantElement].ko}</p>
-              </CardContent>
-            </Card>
-          )}
-          {saju.yongshin && (
-            <Card className="border-none shadow-sm">
-              <CardContent className="pt-4 text-center">
-                <p className="text-xs text-[var(--muted-foreground)]">용신</p>
-                <p className="text-2xl font-bold font-[family-name:var(--font-serif)] mt-1" style={{ color: ELEMENT_COLORS[saju.yongshin] }}>
-                  {ELEMENT_NAMES[saju.yongshin].hanja}
-                </p>
-                <p className="text-xs text-[var(--muted-foreground)]">{ELEMENT_NAMES[saju.yongshin].ko}</p>
-              </CardContent>
-            </Card>
-          )}
-        </div>
-
-        {/* 리포트 요약 */}
-        {saju.reportData && (
+        {/* 사주 데이터 미입력 시엔 여기서 끝 */}
+        {!saju ? (
+          <p className="text-center text-sm text-[var(--muted-foreground)] py-4">
+            사주를 입력하면 사주팔자 분석이 표시돼요
+          </p>
+        ) : (
           <>
-            {["personality", "romance", "wealth", "health"].map((key) => {
-              const labels: Record<string, { title: string; icon: string }> = {
-                personality: { title: "성격", icon: "🧠" },
-                romance: { title: "연애", icon: "💕" },
-                wealth: { title: "재물", icon: "💰" },
-                health: { title: "건강", icon: "🏥" },
-              };
-              const info = labels[key];
-              const content = saju.reportData?.[key];
-              if (!info || !content) return null;
+            {/* 사주 4기둥 */}
+            <Card className="border-none shadow-lg">
+              <CardContent className="pt-6">
+                <h2 className="text-sm font-medium text-[var(--muted-foreground)] mb-3">사주 사기둥</h2>
+                <div className="grid grid-cols-4 gap-3">
+                  <PillarCard label="시주" stem={saju.hourStem} branch={saju.hourBranch} />
+                  <PillarCard label="일주" stem={saju.dayStem} branch={saju.dayBranch} />
+                  <PillarCard label="월주" stem={saju.monthStem} branch={saju.monthBranch} />
+                  <PillarCard label="연주" stem={saju.yearStem} branch={saju.yearBranch} />
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* 오행 밸런스 */}
+            {saju.elementScores && (() => {
+              const elements: Element[] = ["wood", "fire", "earth", "metal", "water"];
+              const scores = saju.elementScores;
+              const maxScore = Math.max(...elements.map((e) => scores[e] || 0));
               return (
-                <Card key={key} className="border-none shadow-sm">
-                  <CardContent className="pt-4">
-                    <h3 className="font-[family-name:var(--font-serif)] text-base font-bold mb-1">
-                      {info.icon} {info.title}
-                    </h3>
-                    <p className="text-sm text-[var(--muted-foreground)] leading-relaxed">{content}</p>
+                <Card className="border-none shadow-lg">
+                  <CardContent className="pt-6 space-y-3">
+                    <h2 className="font-[family-name:var(--font-serif)] text-lg font-bold mb-2">오행 밸런스</h2>
+                    {elements.map((el) => (
+                      <div key={el} className="flex items-center gap-2">
+                        <span className="w-8 text-center text-sm font-bold font-[family-name:var(--font-serif)]" style={{ color: ELEMENT_COLORS[el] }}>
+                          {ELEMENT_NAMES[el].hanja}
+                        </span>
+                        <div className="flex-1 h-3 bg-[var(--muted)] rounded-full overflow-hidden">
+                          <div
+                            className="h-full rounded-full"
+                            style={{
+                              width: `${maxScore > 0 ? ((scores[el] || 0) / maxScore) * 100 : 0}%`,
+                              backgroundColor: ELEMENT_COLORS[el],
+                            }}
+                          />
+                        </div>
+                        <span className="w-8 text-right text-xs text-[var(--muted-foreground)]">{scores[el] || 0}</span>
+                      </div>
+                    ))}
                   </CardContent>
                 </Card>
               );
-            })}
+            })()}
+
+            {/* 용신 & 주요 오행 */}
+            {(saju.dominantElement || saju.yongshin) && (
+              <div className="grid grid-cols-2 gap-3">
+                {saju.dominantElement && (
+                  <Card className="border-none shadow-sm">
+                    <CardContent className="pt-4 text-center">
+                      <p className="text-xs text-[var(--muted-foreground)]">주요 오행</p>
+                      <p className="text-2xl font-bold font-[family-name:var(--font-serif)] mt-1" style={{ color: ELEMENT_COLORS[saju.dominantElement] }}>
+                        {ELEMENT_NAMES[saju.dominantElement].hanja}
+                      </p>
+                      <p className="text-xs text-[var(--muted-foreground)]">{ELEMENT_NAMES[saju.dominantElement].ko}</p>
+                    </CardContent>
+                  </Card>
+                )}
+                {saju.yongshin && (
+                  <Card className="border-none shadow-sm">
+                    <CardContent className="pt-4 text-center">
+                      <p className="text-xs text-[var(--muted-foreground)]">용신</p>
+                      <p className="text-2xl font-bold font-[family-name:var(--font-serif)] mt-1" style={{ color: ELEMENT_COLORS[saju.yongshin] }}>
+                        {ELEMENT_NAMES[saju.yongshin].hanja}
+                      </p>
+                      <p className="text-xs text-[var(--muted-foreground)]">{ELEMENT_NAMES[saju.yongshin].ko}</p>
+                    </CardContent>
+                  </Card>
+                )}
+              </div>
+            )}
+
+            {/* 리포트 요약 */}
+            {saju.reportData && (
+              <>
+                {["personality", "romance", "wealth", "health"].map((key) => {
+                  const labels: Record<string, { title: string; icon: string }> = {
+                    personality: { title: "성격", icon: "🧠" },
+                    romance: { title: "연애", icon: "💕" },
+                    wealth: { title: "재물", icon: "💰" },
+                    health: { title: "건강", icon: "🏥" },
+                  };
+                  const info = labels[key];
+                  const content = saju.reportData?.[key];
+                  if (!info || !content || typeof content !== "string") return null;
+                  return (
+                    <Card key={key} className="border-none shadow-sm">
+                      <CardContent className="pt-4">
+                        <h3 className="font-[family-name:var(--font-serif)] text-base font-bold mb-1">
+                          {info.icon} {info.title}
+                        </h3>
+                        <p className="text-sm text-[var(--muted-foreground)] leading-relaxed">{content}</p>
+                      </CardContent>
+                    </Card>
+                  );
+                })}
+              </>
+            )}
           </>
         )}
       </div>
