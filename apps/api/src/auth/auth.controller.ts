@@ -30,15 +30,18 @@ export class AuthController {
     const callbackUrl = this.config.get('KAKAO_CALLBACK_URL');
     const stateParam = from === 'app' ? `&state=app` : '';
     // scope 명시 — 이미 다른 항목에 동의했어도 새로 추가된 항목은 명시해야
-    // 카카오가 동의 화면에 띄움. 콘솔에서 켜둔 것만 의미 있고, 켜져있지
-    // 않은 scope 는 무시됨.
+    // 카카오가 동의 화면에 띄움.
     const scope = 'profile_nickname';
+    // prompt=login — Safari 의 기존 카카오 세션을 무시하고 매번 로그인 화면 노출.
+    // 매칭 앱이라 다른 카톡 계정으로 갈아끼우는 시나리오 흔함. 자동 로그인 막아서
+    // 계정 선택권 확보.
     const kakaoUrl =
       `https://kauth.kakao.com/oauth/authorize` +
       `?client_id=${clientId}` +
       `&redirect_uri=${encodeURIComponent(callbackUrl)}` +
       `&response_type=code` +
       `&scope=${scope}` +
+      `&prompt=login` +
       stateParam;
     res.redirect(kakaoUrl);
   }
