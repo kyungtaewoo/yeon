@@ -7,6 +7,20 @@ import type { IdealMatchProfileV2 } from '@/lib/saju/reverseMatch-v2';
  * MVP 단계엔 실제 유저 간 매칭이 없어서 wish-list 형태로 로컬 저장.
  * 추후 실제 매칭 도입 시 백엔드 saved_ideal_targets 테이블로 마이그레이션 예정.
  */
+
+/**
+ * 회원 등급별 매칭 대상 등록 가능 개수.
+ * 일반(무료) 3개, 프리미엄 10개.
+ * 정책 변경 시 여기만 수정.
+ */
+export const SAVED_MATCH_LIMITS = {
+  free: 3,
+  premium: 10,
+} as const;
+
+export function getSavedMatchLimit(isPremium: boolean): number {
+  return isPremium ? SAVED_MATCH_LIMITS.premium : SAVED_MATCH_LIMITS.free;
+}
 export interface SavedMatch {
   /** 클라이언트 생성 ID — UUID 대신 timestamp + rank 조합 */
   id: string;

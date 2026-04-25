@@ -7,7 +7,8 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { useOnboardingStore } from "@/stores/onboardingStore";
-import { useSavedMatchesStore } from "@/stores/savedMatchesStore";
+import { useSavedMatchesStore, getSavedMatchLimit } from "@/stores/savedMatchesStore";
+import { usePremium } from "@/hooks/usePremium";
 import { STEM_TO_ELEMENT, ELEMENT_NAMES, STEM_KOREAN, BRANCH_KOREAN } from "@/lib/saju/constants";
 import type { IdealMatchProfileV2 } from "@/lib/saju/reverseMatch-v2";
 import type { Element } from "@/lib/saju/types";
@@ -57,10 +58,12 @@ function ProfileCard({
   profile,
   onSelect,
   alreadySaved,
+  limitReached,
 }: {
   profile: IdealMatchProfileV2;
   onSelect: (profile: IdealMatchProfileV2) => void;
   alreadySaved: boolean;
+  limitReached: boolean;
 }) {
   const [expanded, setExpanded] = useState(false);
   const stemElement = STEM_TO_ELEMENT[profile.pillars.day.stem];
@@ -218,7 +221,11 @@ function ProfileCard({
           disabled={alreadySaved}
           className="w-full bg-[var(--brand-red)] hover:bg-[var(--brand-red)]/90 text-white py-5 text-sm disabled:opacity-50"
         >
-          {alreadySaved ? "이미 매칭 대상에 등록됨" : "이 사주로 매칭"}
+          {alreadySaved
+            ? "이미 매칭 대상에 등록됨"
+            : limitReached
+              ? "등록 가능 개수 초과 — 눌러서 안내 보기"
+              : "이 사주로 매칭"}
         </Button>
       </CardContent>
     </Card>
@@ -229,6 +236,8 @@ export default function IdealMatchPage() {
   const router = useRouter();
   const { idealProfiles } = useOnboardingStore();
   const { matches: savedMatches, add: addSavedMatch } = useSavedMatchesStore();
+  const { isPremium } = usePremium();
+  const limit = getSavedMatchLimit(isPremium);
   const [showAll, setShowAll] = useState(false);
 
   // zustand persist hydration race 방어 — 하드 내비로 들어온 직후 첫 렌더 시
@@ -265,9 +274,20 @@ export default function IdealMatchPage() {
   const savedKeys = new Set(savedMatches.map((m) => matchKey(m.profile)));
 
   const handleSelect = (profile: IdealMatchProfileV2) => {
+    if (savedMatches.length >= limit) {
+      toast.error(`매칭 대상은 최대 ${limit}개까지 등록할 수 있어요`, {
+        description: isPremium
+          ? "기존 매칭 대상을 삭제한 뒤 다시 시도해주세요."
+          : "프리미엄으로 업그레이드하면 최대 10개까지 등록할 수 있어요.",
+        action: isPremium
+          ? { label: "매칭 탭", onClick: () => router.push("/matches") }
+          : { label: "프리미엄 보기", onClick: () => router.push("/premium") },
+      });
+      return;
+    }
     addSavedMatch(profile);
     toast.success("매칭 대상에 등록되었어요", {
-      description: "매칭 탭에서 확인할 수 있어요.",
+      description: `${savedMatches.length + 1}/${limit} · 매칭 탭에서 확인할 수 있어요.`,
     });
     router.push("/matches");
   };
@@ -321,6 +341,19 @@ export default function IdealMatchPage() {
           </p>
         </div>
 
+        {/* 등록 현황 */}
+        <Card className="border-none shadow-sm bg-[var(--brand-gold)]/5">
+          <CardContent className="py-3 text-center">
+            <p className="text-xs text-[var(--muted-foreground)]">
+              매칭 대상 등록{" "}
+              <span className="font-bold text-[var(--brand-gold)]">
+                {savedMatches.length} / {limit}
+              </span>{" "}
+              {isPremium ? "(프리미엄)" : "(일반)"}
+            </p>
+          </CardContent>
+        </Card>
+
         {/* 프로파일 카드 */}
         {displayProfiles.map((profile) => (
           <ProfileCard
@@ -328,6 +361,7 @@ export default function IdealMatchPage() {
             profile={profile}
             onSelect={handleSelect}
             alreadySaved={savedKeys.has(matchKey(profile))}
+            limitReached={savedMatches.length >= limit}
           />
         ))}
 

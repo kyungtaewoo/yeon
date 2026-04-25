@@ -6,7 +6,12 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { useOnboardingStore } from "@/stores/onboardingStore";
-import { useSavedMatchesStore, type SavedMatch } from "@/stores/savedMatchesStore";
+import {
+  useSavedMatchesStore,
+  getSavedMatchLimit,
+  type SavedMatch,
+} from "@/stores/savedMatchesStore";
+import { usePremium } from "@/hooks/usePremium";
 import { STEM_TO_ELEMENT, ELEMENT_NAMES } from "@/lib/saju/constants";
 import type { Element } from "@/lib/saju/types";
 
@@ -93,6 +98,9 @@ export default function MatchesPage() {
   const router = useRouter();
   const { matches, remove } = useSavedMatchesStore();
   const { pillars } = useOnboardingStore();
+  const { isPremium } = usePremium();
+  const limit = getSavedMatchLimit(isPremium);
+  const limitReached = matches.length >= limit;
   const [hydrated, setHydrated] = useState(false);
 
   useEffect(() => {
@@ -105,6 +113,11 @@ export default function MatchesPage() {
   }, []);
 
   const handleNewMatch = () => {
+    if (limitReached) {
+      // 한도 초과 시 안내 (버튼은 disabled 라 도달 안 하지만 방어)
+      router.push(isPremium ? "/matches" : "/premium");
+      return;
+    }
     // 사주 미입력이면 saju-input 부터, 있으면 바로 preferences 로
     if (!pillars) {
       router.push("/saju-input");
@@ -133,11 +146,40 @@ export default function MatchesPage() {
           <Button
             type="button"
             onClick={handleNewMatch}
-            className="bg-[var(--brand-red)] hover:bg-[var(--brand-red)]/90 text-white text-sm px-4 py-2"
+            disabled={limitReached}
+            className="bg-[var(--brand-red)] hover:bg-[var(--brand-red)]/90 text-white text-sm px-4 py-2 disabled:opacity-50"
           >
             매칭하기
           </Button>
         </div>
+
+        {/* 한도 표시 + 프리미엄 안내 */}
+        <Card className="border-none shadow-sm bg-[var(--brand-gold)]/5">
+          <CardContent className="py-3">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-xs text-[var(--muted-foreground)]">
+                  매칭 대상 등록 한도{" "}
+                  <span className="font-bold text-[var(--brand-gold)]">
+                    {matches.length} / {limit}
+                  </span>
+                </p>
+                <p className="text-[10px] text-[var(--muted-foreground)] mt-0.5">
+                  {isPremium ? "프리미엄 회원" : "일반 회원 — 프리미엄 시 최대 10개까지"}
+                </p>
+              </div>
+              {!isPremium && (
+                <button
+                  type="button"
+                  onClick={() => router.push("/premium")}
+                  className="text-xs text-[var(--brand-gold)] underline"
+                >
+                  업그레이드
+                </button>
+              )}
+            </div>
+          </CardContent>
+        </Card>
 
         <div>
           <p className="text-sm text-[var(--muted-foreground)] mb-3">
