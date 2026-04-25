@@ -107,7 +107,8 @@ export class AuthService {
 
     const kakaoUser: KakaoUserInfo = await userRes.json();
     const kakaoId = String(kakaoUser.id);
-    const nickname = kakaoUser.kakao_account?.profile?.nickname || `유저${kakaoId.slice(-4)}`;
+    const kakaoNickname = kakaoUser.kakao_account?.profile?.nickname; // 동의 안 했으면 undefined
+    const fallbackNickname = `유저${kakaoId.slice(-4)}`;
     const gender = kakaoUser.kakao_account?.gender; // "male" | "female" | undefined
 
     // 3. DB에서 유저 조회 또는 생성
@@ -115,7 +116,16 @@ export class AuthService {
     const isNewUser = !user;
 
     if (!user) {
-      user = await this.usersService.createFromKakao(kakaoId, nickname, gender);
+      user = await this.usersService.createFromKakao(
+        kakaoId,
+        kakaoNickname || fallbackNickname,
+        gender,
+      );
+    } else if (kakaoNickname && user.nickname !== kakaoNickname && user.nickname.startsWith('유저')) {
+      // 기존 유저 — 자동 생성된 닉네임 (유저XXXX) 인 경우에만 카카오 닉네임으로 갱신.
+      // 사용자가 직접 수정한 닉네임은 보존 (추후 닉네임 편집 기능 들어와도 안전).
+      const updated = await this.usersService.update(user.id, { nickname: kakaoNickname });
+      if (updated) user = updated;
     }
 
     // 4. JWT 발급
