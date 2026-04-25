@@ -77,7 +77,13 @@ export default function MySajuPage() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    if (authLoading || !user || !token) return;
+    if (authLoading) return;
+
+    // 비로그인 — API 호출 없이 빈 상태로 (사주 입력 안내 화면 보여주기)
+    if (!user || !token) {
+      setLoading(false);
+      return;
+    }
 
     const fetchSaju = async () => {
       try {

@@ -22,7 +22,13 @@ export default function ProfilePage() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    if (authLoading || !user || !token) return;
+    if (authLoading) return;
+
+    // 비로그인 — API 호출 없이 빈 상태로
+    if (!user || !token) {
+      setLoading(false);
+      return;
+    }
 
     const fetchProfile = async () => {
       try {
@@ -40,7 +46,7 @@ export default function ProfilePage() {
 
   const handleSignOut = () => {
     signOut();
-    router.replace("/login");
+    router.replace("/");
   };
 
   if (authLoading || loading) {

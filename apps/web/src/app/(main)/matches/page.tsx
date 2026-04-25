@@ -42,7 +42,13 @@ export default function MatchesPage() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    if (authLoading || !user || !token) return;
+    if (authLoading) return;
+
+    // 비로그인 — API 호출 없이 빈 상태로
+    if (!user || !token) {
+      setLoading(false);
+      return;
+    }
 
     const fetchMatches = async () => {
       try {
