@@ -4,24 +4,21 @@ import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { CompassMotif } from "@/components/onboarding/CompassMotif";
-import { apiClient, ApiError } from "@/lib/api";
+import { apiClient } from "@/lib/api";
 import { useAuthStore } from "@/stores/authStore";
 import { useOnboardingStore } from "@/stores/onboardingStore";
-import type { IdealMatchProfileV2 } from "@/lib/saju/reverseMatch-v2";
+import { findIdealMatchesV2 } from "@/lib/saju/reverseMatch-v2";
 
 // 주의: Capacitor 환경에서는 window.location.href 로 하드 내비하지 말 것.
 // Capacitor 의 CapacitorRouter 가 확장자 없는 경로를 무조건 /index.html (랜딩) 로
 // 라우팅함. 모든 in-app 이동은 next/navigation 의 router.push/replace 를 사용해
 // 클라이언트 사이드 라우팅으로 처리해야 함.
 
-/** 최소 노출 시간 (ms) — 응답이 아무리 빨리 와도 이만큼은 보여줘야 분위기가 살음. */
+/** 최소 노출 시간 (ms) — 계산이 아무리 빨라도 이만큼은 보여줘야 분위기가 살음. */
 const MIN_EXPOSURE_MS = 8_000;
 
 /** 프로그레스 바의 100% 기준 시간. 이보다 오래 걸리면 100% 로 고정. */
 const PROGRESS_FULL_MS = 35_000;
-
-/** find-ideal 전용 긴 타임아웃. (apiClient 기본 60s 는 부족) */
-const FIND_IDEAL_TIMEOUT_MS = 120_000;
 
 interface Stage {
   /** 이 시각(초) 미만일 때 보여줄 텍스트. */
@@ -86,71 +83,55 @@ export default function MatchingPage() {
     };
 
     const run = async () => {
-      const token = useAuthStore.getState().token;
-      if (!token) {
-        // 정상 흐름이면 onboarding layout 이 /login 으로 리다이렉트해주지만,
-        // 스토어 타이밍 엣지 케이스 방어.
-        router.replace("/login");
+      const { weights, preferredAgeMin, preferredAgeMax, pillars } =
+        useOnboardingStore.getState();
+
+      // 사주 미입력 — 입력 페이지로 복귀
+      if (!pillars) {
+        setTimeout(() => {
+          if (cancelled) return;
+          toast.error("사주 정보가 필요해요", {
+            description: "먼저 사주를 입력해주세요.",
+          });
+          router.replace("/saju-input");
+        }, waitMinimum());
         return;
       }
 
-      const { weights, preferredAgeMin, preferredAgeMax } = useOnboardingStore.getState();
-
-      try {
-        await apiClient("/users/me", {
+      // 로그인 상태면 백엔드에 선호 나이대 동기화 (실 매칭 트리거용). fire-and-forget.
+      const token = useAuthStore.getState().token;
+      if (token) {
+        apiClient("/users/me", {
           method: "PATCH",
           token,
           body: { preferredAgeMin, preferredAgeMax },
+        }).catch((err) => console.warn("[Matching] 선호 동기화 실패:", err));
+      }
+
+      // 무거운 계산 — 첫 페인트와 프로그레스 바 시작을 보장하기 위해 다음 tick 으로 미룸
+      await new Promise((r) => setTimeout(r, 0));
+
+      try {
+        const profiles = findIdealMatchesV2({
+          mySaju: pillars,
+          weights,
+          ageRange: { min: preferredAgeMin, max: preferredAgeMax },
+          topN: 10,
         });
 
-        const res = await apiClient<{ profiles: { profile: IdealMatchProfileV2 }[] }>(
-          "/matching/find-ideal",
-          {
-            method: "POST",
-            token,
-            body: { weights, topN: 10 },
-            timeoutMs: FIND_IDEAL_TIMEOUT_MS,
-          },
-        );
-
         if (cancelled) return;
-        useOnboardingStore.getState().setIdealProfiles(res.profiles.map((p) => p.profile));
+        useOnboardingStore.getState().setIdealProfiles(profiles);
 
         setTimeout(() => {
           if (cancelled) return;
           router.replace("/ideal-match");
         }, waitMinimum());
       } catch (e) {
-        console.error("[Matching] find-ideal 에러:", e);
+        console.error("[Matching] 이상형 계산 에러:", e);
         if (cancelled) return;
 
-        // 최소 노출 시간만큼 기다린 뒤 토스트 + 복귀
         setTimeout(() => {
           if (cancelled) return;
-
-          if (e instanceof ApiError && e.status === 401) {
-            toast.error("로그인이 만료됐어요", {
-              description: "다시 로그인한 뒤 시도해주세요.",
-            });
-            router.replace("/login");
-            return;
-          }
-          if (e instanceof ApiError && e.status === 400) {
-            toast.error("사주 정보가 필요해요", {
-              description: e.message || "먼저 사주를 입력해주세요.",
-            });
-            router.replace("/saju-input");
-            return;
-          }
-          if (e instanceof ApiError && e.status === 0) {
-            // 타임아웃
-            toast.error("응답이 오지 않았어요", {
-              description: "네트워크 상태를 확인한 뒤 다시 시도해주세요.",
-            });
-            router.replace("/preferences");
-            return;
-          }
-
           const msg = e instanceof Error ? e.message : "알 수 없는 오류";
           toast.error("이상형 탐색에 실패했어요", {
             description: `잠시 후 다시 시도해주세요. (${msg})`,

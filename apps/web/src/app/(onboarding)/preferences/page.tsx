@@ -2,13 +2,11 @@
 
 import { useRouter } from "next/navigation";
 import { useState } from "react";
-import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Slider } from "@/components/ui/slider";
 import { useOnboardingStore } from "@/stores/onboardingStore";
 import type { CompatibilityWeights } from "@/lib/saju/types";
-import { useAuthStore } from "@/stores/authStore";
 
 // 주의: Capacitor 환경에서는 window.location.href 로 하드 내비하지 말 것.
 // Capacitor 의 CapacitorRouter 가 확장자 없는 경로를 무조건 /index.html (랜딩) 로
@@ -56,27 +54,12 @@ export default function PreferencesPage() {
   };
 
   const handleSubmit = () => {
-    const token = useAuthStore.getState().token;
-
-    // 온보딩 레이아웃에서 이미 토큰 없으면 /login 으로 리다이렉트하지만,
-    // 스토어 동기화 타이밍 등의 엣지 케이스 방어용 2차 게이트.
-    if (!token) {
-      toast.error("로그인이 필요해요", {
-        description: "이상적 상대를 찾으려면 먼저 로그인해주세요.",
-        action: {
-          label: "로그인하러 가기",
-          onClick: () => router.push("/login"),
-        },
-      });
-      return;
-    }
-
     setLoading(true);
     setWeights(weights);
     setAgeRange(ageRange[0], ageRange[1]);
 
-    // 실제 API 호출/탐색 대기 UI 는 /matching 에서 담당.
-    // 이 페이지는 네비게이션이 시작되는 찰나 동안만 로딩 표시.
+    // 실제 탐색/대기 UI 는 /matching 에서 담당. 이상형 계산은 클라이언트 사이드라
+    // 비로그인 데모도 그대로 진행됨. 로그인은 프리미엄/실 매칭 단계에서 요구.
     router.push("/matching");
   };
 
