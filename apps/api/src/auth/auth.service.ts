@@ -27,7 +27,7 @@ export class KakaoCodeAlreadyUsedError extends Error {
   }
 }
 
-interface KakaoLoginResult {
+export interface KakaoLoginResult {
   accessToken: string;
   user: {
     id: string;
