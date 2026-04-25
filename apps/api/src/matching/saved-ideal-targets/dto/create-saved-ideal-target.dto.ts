@@ -1,15 +1,23 @@
 import {
-  IsInt, IsNotEmpty, IsNumber, IsObject, IsString,
-  Length, Max, Min, ValidateIf,
+  IsIn, IsInt, IsNotEmpty, IsNumber, IsObject,
+  Max, Min,
 } from 'class-validator';
+import { HEAVENLY_STEMS, EARTHLY_BRANCHES } from '@yeon/saju-engine';
 
+/**
+ * dayStem / dayBranch 는 한자 (CJK 표의문자) 로만 저장.
+ * 한글 (e.g., '갑', '인') 이 흘러들면 unique 제약이 동일 사주를 다른 행으로
+ * 인식해 dedup 우회 — 그래서 enum 강제.
+ */
 export class CreateSavedIdealTargetDto {
-  @IsString()
-  @Length(1, 1, { message: 'dayStem 은 한 글자여야 합니다' })
+  @IsIn(HEAVENLY_STEMS as readonly string[], {
+    message: 'dayStem 은 한자 천간이어야 합니다 (甲乙丙丁戊己庚辛壬癸)',
+  })
   dayStem!: string;
 
-  @IsString()
-  @Length(1, 1, { message: 'dayBranch 는 한 글자여야 합니다' })
+  @IsIn(EARTHLY_BRANCHES as readonly string[], {
+    message: 'dayBranch 는 한자 지지여야 합니다 (子丑寅卯辰巳午未申酉戌亥)',
+  })
   dayBranch!: string;
 
   @IsInt()
@@ -20,7 +28,6 @@ export class CreateSavedIdealTargetDto {
   @IsInt()
   @Min(0)
   @Max(120)
-  @ValidateIf((o: CreateSavedIdealTargetDto) => o.ageMin != null)
   ageMax!: number;
 
   @IsNumber()

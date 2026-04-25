@@ -1,5 +1,5 @@
 import {
-  ConflictException, Injectable, NotFoundException,
+  BadRequestException, ConflictException, Injectable, NotFoundException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
@@ -16,6 +16,18 @@ export const SAVED_IDEAL_TARGET_LIMITS = {
   free: 3,
   premium: 10,
 } as const;
+
+export type SavedIdealTargetTier = keyof typeof SAVED_IDEAL_TARGET_LIMITS;
+
+export interface SavedIdealTargetListResponse {
+  items: SavedIdealTarget[];
+  meta: {
+    count: number;
+    limit: number;
+    tier: SavedIdealTargetTier;
+    canAddMore: boolean;
+  };
+}
 
 /** PostgreSQL unique violation SQLSTATE. */
 const PG_UNIQUE_VIOLATION = '23505';
@@ -43,7 +55,8 @@ export class SavedIdealTargetsService {
    */
   async create(userId: string, dto: CreateSavedIdealTargetDto): Promise<SavedIdealTarget> {
     if (dto.ageMax < dto.ageMin) {
-      throw new ConflictException('ageMax 는 ageMin 보다 작을 수 없습니다');
+      // class-validator 가 cross-field 검증을 안 해서 서비스에서 가드.
+      throw new BadRequestException('ageMax 는 ageMin 보다 작을 수 없습니다');
     }
 
     const user = await this.userRepo.findOne({ where: { id: userId } });
@@ -78,12 +91,27 @@ export class SavedIdealTargetsService {
     }
   }
 
-  /** 본인 wish-list 전체 (savedAt DESC). */
-  async findAllByUser(userId: string): Promise<SavedIdealTarget[]> {
-    return this.repo.find({
+  /**
+   * 본인 wish-list — items + meta (limit/tier/canAddMore) 동시 반환.
+   * 클라가 별도 user API 호출 없이 추가 버튼 disable 여부를 즉시 판단 가능.
+   */
+  async getMyList(userId: string): Promise<SavedIdealTargetListResponse> {
+    const user = await this.userRepo.findOne({ where: { id: userId } });
+    if (!user) throw new NotFoundException('사용자를 찾을 수 없습니다');
+
+    const items = await this.repo.find({
       where: { userId },
       order: { savedAt: 'DESC' },
     });
+
+    const tier: SavedIdealTargetTier = user.isPremium ? 'premium' : 'free';
+    const limit = SAVED_IDEAL_TARGET_LIMITS[tier];
+    const count = items.length;
+
+    return {
+      items,
+      meta: { count, limit, tier, canAddMore: count < limit },
+    };
   }
 
   /** 본인 소유 항목 1개 삭제. 다른 사람 것 / 미존재 시 404. */

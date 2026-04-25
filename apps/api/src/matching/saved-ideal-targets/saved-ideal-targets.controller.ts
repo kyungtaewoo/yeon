@@ -3,7 +3,10 @@ import {
   Post, Request, UseGuards,
 } from '@nestjs/common';
 import { JwtAuthGuard } from '../../auth/guards/jwt-auth.guard';
-import { SavedIdealTargetsService } from './saved-ideal-targets.service';
+import {
+  SavedIdealTargetsService,
+  SavedIdealTargetListResponse,
+} from './saved-ideal-targets.service';
 import { CreateSavedIdealTargetDto } from './dto/create-saved-ideal-target.dto';
 
 @Controller('matches/saved')
@@ -11,11 +14,10 @@ import { CreateSavedIdealTargetDto } from './dto/create-saved-ideal-target.dto';
 export class SavedIdealTargetsController {
   constructor(private readonly service: SavedIdealTargetsService) {}
 
-  /** GET /matches/saved — 내 wish-list */
+  /** GET /matches/saved — 내 wish-list (items + meta) */
   @Get()
-  async list(@Request() req: any) {
-    const targets = await this.service.findAllByUser(req.user.id);
-    return { targets };
+  async list(@Request() req: any): Promise<SavedIdealTargetListResponse> {
+    return this.service.getMyList(req.user.id);
   }
 
   /** POST /matches/saved — 추가 */

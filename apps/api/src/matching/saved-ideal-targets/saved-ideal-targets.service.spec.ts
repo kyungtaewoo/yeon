@@ -1,5 +1,5 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { ConflictException, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ConflictException, NotFoundException } from '@nestjs/common';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import {
@@ -33,8 +33,8 @@ const buildUser = (overrides: Partial<User> = {}): User =>
   } as User);
 
 const buildDto = (overrides: Partial<CreateSavedIdealTargetDto> = {}): CreateSavedIdealTargetDto => ({
-  dayStem: '갑',
-  dayBranch: '자',
+  dayStem: '甲',
+  dayBranch: '子',
   ageMin: 25,
   ageMax: 35,
   totalScore: 87.5,
@@ -142,36 +142,73 @@ describe('SavedIdealTargetsService', () => {
     });
 
     // 8
-    it('ageMax < ageMin 이면 ConflictException (서비스 레벨 가드)', async () => {
-      // user lookup 도달하기 전에 거부되어야 함
+    it('ageMax < ageMin 이면 BadRequestException (서비스 레벨 cross-field 가드)', async () => {
       await expect(
         service.create(USER_ID, buildDto({ ageMin: 40, ageMax: 30 })),
-      ).rejects.toThrow(ConflictException);
+      ).rejects.toThrow(BadRequestException);
       expect(userRepo.findOne).not.toHaveBeenCalled();
     });
   });
 
-  describe('findAllByUser', () => {
+  describe('getMyList', () => {
     // 9
-    it('본인 wish-list 만 반환 (savedAt DESC, where userId)', async () => {
-      const rows = [
+    it('비프리미엄 — items + meta 구성, canAddMore=true', async () => {
+      userRepo.findOne!.mockResolvedValue(buildUser({ isPremium: false }));
+      const items = [
         { id: 'r1', savedAt: new Date('2026-04-26') },
         { id: 'r2', savedAt: new Date('2026-04-25') },
       ] as SavedIdealTarget[];
-      repo.find!.mockResolvedValue(rows);
+      repo.find!.mockResolvedValue(items);
 
-      const result = await service.findAllByUser(USER_ID);
+      const result = await service.getMyList(USER_ID);
 
-      expect(result).toBe(rows);
+      expect(result).toEqual({
+        items,
+        meta: { count: 2, limit: 3, tier: 'free', canAddMore: true },
+      });
       expect(repo.find).toHaveBeenCalledWith({
         where: { userId: USER_ID },
         order: { savedAt: 'DESC' },
       });
     });
+
+    // 10
+    it('프리미엄 limit 도달 — canAddMore=false', async () => {
+      userRepo.findOne!.mockResolvedValue(buildUser({ isPremium: true }));
+      const items = Array.from({ length: 10 }, (_, i) => ({ id: `r${i}` } as SavedIdealTarget));
+      repo.find!.mockResolvedValue(items);
+
+      const result = await service.getMyList(USER_ID);
+
+      expect(result.meta).toEqual({
+        count: 10, limit: 10, tier: 'premium', canAddMore: false,
+      });
+    });
+
+    // 11
+    it('빈 wish-list — meta 는 tier/limit 채우고 canAddMore=true', async () => {
+      userRepo.findOne!.mockResolvedValue(buildUser({ isPremium: false }));
+      repo.find!.mockResolvedValue([]);
+
+      const result = await service.getMyList(USER_ID);
+
+      expect(result).toEqual({
+        items: [],
+        meta: { count: 0, limit: 3, tier: 'free', canAddMore: true },
+      });
+    });
+
+    // 12
+    it('존재하지 않는 user → NotFoundException', async () => {
+      userRepo.findOne!.mockResolvedValue(null);
+
+      await expect(service.getMyList(USER_ID)).rejects.toThrow(NotFoundException);
+      expect(repo.find).not.toHaveBeenCalled();
+    });
   });
 
   describe('remove', () => {
-    // 10
+    // 13
     it('본인 소유 항목 삭제 성공', async () => {
       repo.delete!.mockResolvedValue({ affected: 1, raw: {} });
 
@@ -179,7 +216,7 @@ describe('SavedIdealTargetsService', () => {
       expect(repo.delete).toHaveBeenCalledWith({ id: 'target-id', userId: USER_ID });
     });
 
-    // 11 (보너스 — affected=0 케이스도 같은 메서드 분기 검증)
+    // 14
     it('다른 사람 것 / 미존재 → NotFoundException (affected=0)', async () => {
       repo.delete!.mockResolvedValue({ affected: 0, raw: {} });
 
