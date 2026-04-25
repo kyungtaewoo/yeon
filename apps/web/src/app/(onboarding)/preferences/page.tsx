@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Slider } from "@/components/ui/slider";
@@ -44,6 +44,28 @@ export default function PreferencesPage() {
   const [ageRange, setLocalAgeRange] = useState<[number, number]>([preferredAgeMin, preferredAgeMax]);
   const [loading, setLoading] = useState(false);
   const currentYear = new Date().getFullYear();
+
+  // 마운트 시 스크롤 최상단 — Capacitor 정적 export 환경에서 라우트 전환 후
+  // 이전 페이지 스크롤 위치 잔존 케이스 방어.
+  useEffect(() => {
+    window.scrollTo(0, 0);
+  }, []);
+
+  // 사주 미입력 상태로 직접 진입한 경우 — saju-input 으로 안내.
+  // hydration 끝난 뒤에만 판단 (persist 복원 전엔 false negative 방지).
+  useEffect(() => {
+    const check = () => {
+      if (!useOnboardingStore.getState().pillars) {
+        router.replace("/saju-input");
+      }
+    };
+    if (useOnboardingStore.persist.hasHydrated()) {
+      check();
+      return;
+    }
+    const unsub = useOnboardingStore.persist.onFinishHydration(check);
+    return unsub;
+  }, [router]);
 
   const updateWeight = (key: keyof CompatibilityWeights, value: number) => {
     setLocalWeights((prev) => ({ ...prev, [key]: value }));

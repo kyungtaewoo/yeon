@@ -2,10 +2,12 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { useOnboardingStore } from "@/stores/onboardingStore";
+import { useSavedMatchesStore } from "@/stores/savedMatchesStore";
 import { STEM_TO_ELEMENT, ELEMENT_NAMES, STEM_KOREAN, BRANCH_KOREAN } from "@/lib/saju/constants";
 import type { IdealMatchProfileV2 } from "@/lib/saju/reverseMatch-v2";
 import type { Element } from "@/lib/saju/types";
@@ -51,7 +53,15 @@ function PillarCell({ label, hanja }: { label: string; hanja: string }) {
   );
 }
 
-function ProfileCard({ profile }: { profile: IdealMatchProfileV2 }) {
+function ProfileCard({
+  profile,
+  onSelect,
+  alreadySaved,
+}: {
+  profile: IdealMatchProfileV2;
+  onSelect: (profile: IdealMatchProfileV2) => void;
+  alreadySaved: boolean;
+}) {
   const [expanded, setExpanded] = useState(false);
   const stemElement = STEM_TO_ELEMENT[profile.pillars.day.stem];
   const elementName = ELEMENT_NAMES[stemElement];
@@ -200,6 +210,16 @@ function ProfileCard({ profile }: { profile: IdealMatchProfileV2 }) {
         <p className="text-xs text-center text-[var(--muted-foreground)] italic border-t border-[var(--border)] pt-3">
           {profile.narrative.summary}
         </p>
+
+        {/* 매칭 등록 CTA */}
+        <Button
+          type="button"
+          onClick={() => onSelect(profile)}
+          disabled={alreadySaved}
+          className="w-full bg-[var(--brand-red)] hover:bg-[var(--brand-red)]/90 text-white py-5 text-sm disabled:opacity-50"
+        >
+          {alreadySaved ? "이미 매칭 대상에 등록됨" : "이 사주로 매칭"}
+        </Button>
       </CardContent>
     </Card>
   );
@@ -208,6 +228,7 @@ function ProfileCard({ profile }: { profile: IdealMatchProfileV2 }) {
 export default function IdealMatchPage() {
   const router = useRouter();
   const { idealProfiles } = useOnboardingStore();
+  const { matches: savedMatches, add: addSavedMatch } = useSavedMatchesStore();
   const [showAll, setShowAll] = useState(false);
 
   // zustand persist hydration race 방어 — 하드 내비로 들어온 직후 첫 렌더 시
@@ -216,13 +237,40 @@ export default function IdealMatchPage() {
   // 방지를 위해 초기값은 false 로 고정하고 useEffect 안에서만 갱신.)
   const [hydrated, setHydrated] = useState(false);
   useEffect(() => {
-    if (useOnboardingStore.persist.hasHydrated()) {
+    if (
+      useOnboardingStore.persist.hasHydrated() &&
+      useSavedMatchesStore.persist.hasHydrated()
+    ) {
       setHydrated(true);
       return;
     }
-    const unsub = useOnboardingStore.persist.onFinishHydration(() => setHydrated(true));
-    return unsub;
+    const unsubA = useOnboardingStore.persist.onFinishHydration(() => {
+      if (useSavedMatchesStore.persist.hasHydrated()) setHydrated(true);
+    });
+    const unsubB = useSavedMatchesStore.persist.onFinishHydration(() => {
+      if (useOnboardingStore.persist.hasHydrated()) setHydrated(true);
+    });
+    return () => {
+      unsubA();
+      unsubB();
+    };
   }, []);
+
+  // 같은 사주(일주 + 시주 + 월주 + 연주)가 이미 저장됐는지 판별
+  const matchKey = (p: IdealMatchProfileV2) =>
+    `${p.pillars.year.stem}${p.pillars.year.branch}` +
+    `-${p.pillars.month.stem}${p.pillars.month.branch}` +
+    `-${p.pillars.day.stem}${p.pillars.day.branch}` +
+    `-${p.pillars.hour ? `${p.pillars.hour.stem}${p.pillars.hour.branch}` : "??"}`;
+  const savedKeys = new Set(savedMatches.map((m) => matchKey(m.profile)));
+
+  const handleSelect = (profile: IdealMatchProfileV2) => {
+    addSavedMatch(profile);
+    toast.success("매칭 대상에 등록되었어요", {
+      description: "매칭 탭에서 확인할 수 있어요.",
+    });
+    router.push("/matches");
+  };
 
   if (!hydrated) {
     return (
@@ -275,7 +323,12 @@ export default function IdealMatchPage() {
 
         {/* 프로파일 카드 */}
         {displayProfiles.map((profile) => (
-          <ProfileCard key={profile.rank} profile={profile} />
+          <ProfileCard
+            key={profile.rank}
+            profile={profile}
+            onSelect={handleSelect}
+            alreadySaved={savedKeys.has(matchKey(profile))}
+          />
         ))}
 
         {/* 프리미엄 유도 — Top 10 보기 */}
@@ -298,13 +351,16 @@ export default function IdealMatchPage() {
           </Card>
         )}
 
-        {/* CTA */}
-        <Button
-          onClick={() => router.push("/home")}
-          className="w-full bg-[var(--brand-red)] hover:bg-[var(--brand-red)]/90 text-white py-6 text-base"
-        >
-          매칭 시작하기
-        </Button>
+        {/* 매칭 탭으로 가기 (이미 등록된 항목 확인용) */}
+        {savedMatches.length > 0 && (
+          <Button
+            onClick={() => router.push("/matches")}
+            variant="outline"
+            className="w-full border-[var(--brand-gold)] text-[var(--brand-gold)] py-5 text-sm"
+          >
+            매칭 탭에서 등록된 대상 보기 ({savedMatches.length})
+          </Button>
+        )}
       </div>
     </div>
   );
