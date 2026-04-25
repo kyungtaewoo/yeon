@@ -149,7 +149,7 @@ export default function MatchesPage() {
             disabled={limitReached}
             className="bg-[var(--brand-red)] hover:bg-[var(--brand-red)]/90 text-white text-sm px-4 py-2 disabled:opacity-50"
           >
-            매칭하기
+            매칭 대상 추가하기
           </Button>
         </div>
 
@@ -193,7 +193,7 @@ export default function MatchesPage() {
                   아직 등록된 매칭 대상이 없어요
                 </p>
                 <p className="text-xs text-[var(--muted-foreground)]">
-                  '매칭하기' 를 눌러 이상적인 상대 사주를 찾아보세요
+                  '매칭 대상 추가하기' 를 눌러 이상적인 상대 사주를 찾아보세요
                 </p>
               </CardContent>
             </Card>

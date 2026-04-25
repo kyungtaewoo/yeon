@@ -7,6 +7,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { apiClient } from "@/lib/api";
 import { useAuth } from "@/hooks/useAuth";
+import { useAuthStore } from "@/stores/authStore";
 import { useOnboardingStore } from "@/stores/onboardingStore";
 import { usePremiumStore } from "@/stores/premiumStore";
 
@@ -48,6 +49,56 @@ export default function ProfilePage() {
   }, [user, token, authLoading]);
 
   const [withdrawing, setWithdrawing] = useState(false);
+
+  // 닉네임 인라인 편집 상태
+  const [editingNickname, setEditingNickname] = useState(false);
+  const [nicknameDraft, setNicknameDraft] = useState("");
+  const [savingNickname, setSavingNickname] = useState(false);
+
+  const startEditNickname = () => {
+    setNicknameDraft(profile?.nickname ?? "");
+    setEditingNickname(true);
+  };
+
+  const cancelEditNickname = () => {
+    setEditingNickname(false);
+    setNicknameDraft("");
+  };
+
+  const saveNickname = async () => {
+    if (!token) return;
+    const trimmed = nicknameDraft.trim();
+    if (!trimmed) {
+      toast.error("닉네임을 입력해주세요");
+      return;
+    }
+    if (trimmed.length > 20) {
+      toast.error("닉네임은 20자 이하로 입력해주세요");
+      return;
+    }
+    if (trimmed === profile?.nickname) {
+      cancelEditNickname();
+      return;
+    }
+    setSavingNickname(true);
+    try {
+      const updated = await apiClient<Profile>("/users/me", {
+        method: "PATCH",
+        token,
+        body: { nickname: trimmed },
+      });
+      setProfile(updated);
+      useAuthStore.getState().updateUser({ nickname: trimmed });
+      toast.success("닉네임이 변경되었어요");
+      setEditingNickname(false);
+    } catch (err) {
+      console.error("닉네임 변경 실패:", err);
+      const msg = err instanceof Error ? err.message : "알 수 없는 오류";
+      toast.error("닉네임 변경 실패", { description: msg });
+    } finally {
+      setSavingNickname(false);
+    }
+  };
 
   const handleSignOut = () => {
     signOut();
@@ -101,17 +152,65 @@ export default function ProfilePage() {
         <Card className="border-none shadow-lg">
           <CardContent className="pt-6">
             <div className="flex items-center gap-4">
-              <div className="h-16 w-16 rounded-full bg-[var(--brand-gold)]/20 flex items-center justify-center">
+              <div className="h-16 w-16 rounded-full bg-[var(--brand-gold)]/20 flex items-center justify-center shrink-0">
                 <span className="font-[family-name:var(--font-serif)] text-2xl text-[var(--brand-gold)]">
                   {profile?.nickname?.[0] || "?"}
                 </span>
               </div>
-              <div>
-                <p className="text-lg font-bold">{profile?.nickname || "이름 없음"}</p>
-                <p className="text-sm text-[var(--muted-foreground)]">
-                  {profile?.gender === "male" ? "남성" : "여성"}
-                  {profile?.birthDate ? ` · ${profile.birthDate.split('T')[0]}` : ""}
-                </p>
+              <div className="flex-1 min-w-0">
+                {editingNickname ? (
+                  <div className="space-y-2">
+                    <input
+                      type="text"
+                      value={nicknameDraft}
+                      onChange={(e) => setNicknameDraft(e.target.value)}
+                      maxLength={20}
+                      autoFocus
+                      placeholder="닉네임"
+                      className="w-full rounded-lg border border-[var(--border)] px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-[var(--brand-gold)]"
+                    />
+                    <div className="flex gap-2">
+                      <Button
+                        type="button"
+                        onClick={saveNickname}
+                        disabled={savingNickname}
+                        className="flex-1 bg-[var(--brand-red)] hover:bg-[var(--brand-red)]/90 text-white text-xs py-1.5 h-auto"
+                      >
+                        {savingNickname ? "저장 중..." : "저장"}
+                      </Button>
+                      <Button
+                        type="button"
+                        onClick={cancelEditNickname}
+                        disabled={savingNickname}
+                        variant="outline"
+                        className="flex-1 text-xs py-1.5 h-auto"
+                      >
+                        취소
+                      </Button>
+                    </div>
+                  </div>
+                ) : (
+                  <>
+                    <div className="flex items-center gap-2">
+                      <p className="text-lg font-bold truncate">
+                        {profile?.nickname || "이름 없음"}
+                      </p>
+                      {token && (
+                        <button
+                          type="button"
+                          onClick={startEditNickname}
+                          className="text-xs text-[var(--brand-gold)] underline shrink-0"
+                        >
+                          변경
+                        </button>
+                      )}
+                    </div>
+                    <p className="text-sm text-[var(--muted-foreground)]">
+                      {profile?.gender === "male" ? "남성" : "여성"}
+                      {profile?.birthDate ? ` · ${profile.birthDate.split('T')[0]}` : ""}
+                    </p>
+                  </>
+                )}
               </div>
             </div>
           </CardContent>
