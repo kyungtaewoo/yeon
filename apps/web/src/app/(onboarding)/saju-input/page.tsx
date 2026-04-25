@@ -32,7 +32,11 @@ export default function SajuInputPage() {
     birthYear, birthMonth, birthDay, birthHour,
     isLunar: storedIsLunar,
     gender: storedGender,
+    pillars: storedPillars,
   } = useOnboardingStore();
+
+  // pillars 가 이미 있으면 "수정" 모드로 간주. UI 헤더/버튼/리다이렉트가 달라짐.
+  const isEditMode = !!storedPillars;
 
   // 기존 입력값이 있으면 그대로 prefill (수정 흐름). 없으면 디폴트.
   const [year, setYear] = useState(birthYear ? String(birthYear) : "1995");
@@ -95,7 +99,9 @@ export default function SajuInputPage() {
         }
       }
 
-      router.push("/saju-report");
+      // 수정 모드면 다시 /my-saju 로 복귀 (온보딩 흐름 다시 안 탐).
+      // 신규 입력 모드면 보고서 → 선호도 → 매칭 흐름으로.
+      router.push(isEditMode ? "/my-saju" : "/saju-report");
     } catch (e) {
       console.error("사주 분석 에러:", e);
       setLoading(false);
@@ -115,15 +121,29 @@ export default function SajuInputPage() {
             &larr; 뒤로
           </button>
 
-          {/* 헤더 */}
+          {/* 헤더 — 신규 입력 vs 수정 모드 */}
           <div className="text-center">
-            <p className="text-sm text-[var(--brand-gold)] font-medium">Step 1 / 4</p>
-            <h1 className="font-[family-name:var(--font-serif)] text-2xl text-[var(--foreground)] mt-1">
-              생년월일시 입력
-            </h1>
-            <p className="text-sm text-[var(--muted-foreground)] mt-1">
-              정확한 사주 분석을 위해 정보를 입력해주세요
-            </p>
+            {isEditMode ? (
+              <>
+                <p className="text-sm text-[var(--brand-gold)] font-medium">사주 정보 수정</p>
+                <h1 className="font-[family-name:var(--font-serif)] text-2xl text-[var(--foreground)] mt-1">
+                  생년월일시 변경
+                </h1>
+                <p className="text-sm text-[var(--muted-foreground)] mt-1">
+                  변경 사항을 저장하면 분석 결과가 새로 갱신돼요
+                </p>
+              </>
+            ) : (
+              <>
+                <p className="text-sm text-[var(--brand-gold)] font-medium">Step 1 / 4</p>
+                <h1 className="font-[family-name:var(--font-serif)] text-2xl text-[var(--foreground)] mt-1">
+                  생년월일시 입력
+                </h1>
+                <p className="text-sm text-[var(--muted-foreground)] mt-1">
+                  정확한 사주 분석을 위해 정보를 입력해주세요
+                </p>
+              </>
+            )}
           </div>
 
           {/* 양력/음력 토글 */}
@@ -245,7 +265,13 @@ export default function SajuInputPage() {
             onClick={handleSubmit}
             className="w-full bg-[var(--brand-red)] hover:bg-[var(--brand-red)]/90 text-white py-6 text-base"
           >
-            {loading ? "사주 분석 중..." : "내 사주 분석하기"}
+            {loading
+              ? isEditMode
+                ? "저장 중..."
+                : "사주 분석 중..."
+              : isEditMode
+                ? "수정 저장"
+                : "내 사주 분석하기"}
           </Button>
         </CardContent>
       </Card>
