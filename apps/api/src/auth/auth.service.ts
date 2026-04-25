@@ -27,8 +27,20 @@ export class KakaoCodeAlreadyUsedError extends Error {
   }
 }
 
+interface KakaoLoginResult {
+  accessToken: string;
+  user: {
+    id: string;
+    nickname: string;
+    gender: string | undefined;
+    isOnboardingComplete: boolean;
+    isPremium: boolean;
+  };
+  isNewUser: boolean;
+}
+
 interface CachedKakaoResult {
-  result: Awaited<ReturnType<AuthService['kakaoLogin']>>;
+  result: KakaoLoginResult;
   expiresAt: number;
 }
 
@@ -52,7 +64,7 @@ export class AuthService {
   /**
    * 카카오 인가코드로 토큰 교환 → 유저 정보 조회 → DB 유저 생성/조회 → JWT 발급
    */
-  async kakaoLogin(code: string, redirectUri: string) {
+  async kakaoLogin(code: string, redirectUri: string): Promise<KakaoLoginResult> {
     // 캐시 hit — 이미 처리된 코드면 그대로 반환 (refresh/double-fire 방어)
     const cached = this.codeCache.get(code);
     if (cached && cached.expiresAt > Date.now()) {
