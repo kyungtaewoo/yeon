@@ -2,10 +2,13 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import { toast } from "sonner";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { apiClient } from "@/lib/api";
 import { useAuth } from "@/hooks/useAuth";
+import { useOnboardingStore } from "@/stores/onboardingStore";
+import { usePremiumStore } from "@/stores/premiumStore";
 
 interface Profile {
   nickname: string;
@@ -44,9 +47,37 @@ export default function ProfilePage() {
     fetchProfile();
   }, [user, token, authLoading]);
 
+  const [withdrawing, setWithdrawing] = useState(false);
+
   const handleSignOut = () => {
     signOut();
     router.replace("/");
+  };
+
+  const handleWithdraw = async () => {
+    if (!token) return;
+    const ok = window.confirm(
+      "정말 탈퇴하시겠어요?\n\n" +
+        "회원 정보, 사주 결과, 매칭 기록, 친구 궁합, 결제 내역까지 모두 영구 삭제되며 복구할 수 없습니다.",
+    );
+    if (!ok) return;
+
+    setWithdrawing(true);
+    try {
+      await apiClient("/auth/me", { method: "DELETE", token });
+      // 로컬 데이터까지 모두 정리
+      signOut();
+      useOnboardingStore.getState().reset();
+      usePremiumStore.getState().clearPremium();
+      toast.success("탈퇴 완료", { description: "이용해주셔서 감사했습니다." });
+      router.replace("/");
+    } catch (err) {
+      console.error("탈퇴 실패:", err);
+      const msg = err instanceof Error ? err.message : "알 수 없는 오류";
+      toast.error("탈퇴 실패", { description: `잠시 후 다시 시도해주세요. (${msg})` });
+    } finally {
+      setWithdrawing(false);
+    }
   };
 
   if (authLoading || loading) {
@@ -117,6 +148,18 @@ export default function ProfilePage() {
         >
           로그아웃
         </Button>
+
+        {/* 탈퇴하기 — 로그인 상태에서만 노출 */}
+        {token && (
+          <button
+            type="button"
+            onClick={handleWithdraw}
+            disabled={withdrawing}
+            className="w-full text-center text-xs text-[var(--muted-foreground)] underline disabled:opacity-50"
+          >
+            {withdrawing ? "탈퇴 처리 중..." : "회원 탈퇴"}
+          </button>
+        )}
 
         <p className="text-center text-xs text-[var(--muted-foreground)]">
           緣 (연) v1.0.0

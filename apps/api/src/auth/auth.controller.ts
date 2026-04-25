@@ -1,13 +1,15 @@
-import { Controller, Post, Get, Body, Query, Res, UseGuards, Request } from '@nestjs/common';
+import { Controller, Post, Get, Delete, Body, Query, Res, UseGuards, Request } from '@nestjs/common';
 import type { Response } from 'express';
 import { ConfigService } from '@nestjs/config';
 import { AuthService, KakaoCodeAlreadyUsedError } from './auth.service';
+import { UsersService } from '../users/users.service';
 import { JwtAuthGuard } from './guards/jwt-auth.guard';
 
 @Controller('auth')
 export class AuthController {
   constructor(
     private readonly authService: AuthService,
+    private readonly usersService: UsersService,
     private readonly config: ConfigService,
   ) {}
 
@@ -89,5 +91,17 @@ export class AuthController {
   @Get('me')
   async getMe(@Request() req: any) {
     return this.authService.getMe(req.user.id);
+  }
+
+  /**
+   * DELETE /auth/me — 계정 탈퇴.
+   * 유저 + 관련 모든 데이터 (사주, 매칭, 친구, 결제) 영구 삭제.
+   * (앱스토어 가이드라인 5.1.1(v) 충족.)
+   */
+  @UseGuards(JwtAuthGuard)
+  @Delete('me')
+  async deleteMe(@Request() req: any) {
+    await this.usersService.deleteAccount(req.user.id);
+    return { ok: true };
   }
 }
