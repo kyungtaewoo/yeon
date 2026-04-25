@@ -10,18 +10,10 @@ import { useOnboardingStore } from "@/stores/onboardingStore";
 import type { CompatibilityWeights } from "@/lib/saju/types";
 import { useAuthStore } from "@/stores/authStore";
 
-// Capacitor 정적 빌드는 trailingSlash:true → /path/index.html 로 export.
-// window.location.href 로 하드 내비할 때 iOS 에서는 trailing slash 를 붙여야 안전.
-function isCapacitor(): boolean {
-  if (typeof window === "undefined") return false;
-  const cap = (window as unknown as { Capacitor?: { isNativePlatform?: () => boolean } }).Capacitor;
-  return cap?.isNativePlatform?.() ?? false;
-}
-
-function navigateHard(path: string) {
-  const withSlash = isCapacitor() && !path.endsWith("/") ? `${path}/` : path;
-  window.location.href = withSlash;
-}
+// 주의: Capacitor 환경에서는 window.location.href 로 하드 내비하지 말 것.
+// Capacitor 의 CapacitorRouter 가 확장자 없는 경로를 무조건 /index.html (랜딩) 로
+// 라우팅함. 모든 in-app 이동은 next/navigation 의 router.push/replace 를 사용해
+// 클라이언트 사이드 라우팅으로 처리해야 함.
 
 const CATEGORIES: Array<{
   key: keyof CompatibilityWeights;
@@ -73,7 +65,7 @@ export default function PreferencesPage() {
         description: "이상적 상대를 찾으려면 먼저 로그인해주세요.",
         action: {
           label: "로그인하러 가기",
-          onClick: () => navigateHard("/login"),
+          onClick: () => router.push("/login"),
         },
       });
       return;
@@ -85,7 +77,7 @@ export default function PreferencesPage() {
 
     // 실제 API 호출/탐색 대기 UI 는 /matching 에서 담당.
     // 이 페이지는 네비게이션이 시작되는 찰나 동안만 로딩 표시.
-    navigateHard("/matching");
+    router.push("/matching");
   };
 
   return (

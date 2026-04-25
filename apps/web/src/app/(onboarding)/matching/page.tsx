@@ -1,5 +1,6 @@
 "use client";
 
+import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { CompassMotif } from "@/components/onboarding/CompassMotif";
@@ -8,16 +9,10 @@ import { useAuthStore } from "@/stores/authStore";
 import { useOnboardingStore } from "@/stores/onboardingStore";
 import type { IdealMatchProfileV2 } from "@/lib/saju/reverseMatch-v2";
 
-// Capacitor 정적 빌드 대응: trailing slash + window.location.href 하드 내비.
-function isCapacitor(): boolean {
-  if (typeof window === "undefined") return false;
-  const cap = (window as unknown as { Capacitor?: { isNativePlatform?: () => boolean } }).Capacitor;
-  return cap?.isNativePlatform?.() ?? false;
-}
-function navigateHard(path: string) {
-  const withSlash = isCapacitor() && !path.endsWith("/") ? `${path}/` : path;
-  window.location.href = withSlash;
-}
+// 주의: Capacitor 환경에서는 window.location.href 로 하드 내비하지 말 것.
+// Capacitor 의 CapacitorRouter 가 확장자 없는 경로를 무조건 /index.html (랜딩) 로
+// 라우팅함. 모든 in-app 이동은 next/navigation 의 router.push/replace 를 사용해
+// 클라이언트 사이드 라우팅으로 처리해야 함.
 
 /** 최소 노출 시간 (ms) — 응답이 아무리 빨리 와도 이만큼은 보여줘야 분위기가 살음. */
 const MIN_EXPOSURE_MS = 8_000;
@@ -55,6 +50,7 @@ function formatElapsed(ms: number): string {
 }
 
 export default function MatchingPage() {
+  const router = useRouter();
   const [elapsedMs, setElapsedMs] = useState(0);
   const [hydrated, setHydrated] = useState(false);
   const startedRef = useRef(false);
@@ -94,7 +90,7 @@ export default function MatchingPage() {
       if (!token) {
         // 정상 흐름이면 onboarding layout 이 /login 으로 리다이렉트해주지만,
         // 스토어 타이밍 엣지 케이스 방어.
-        navigateHard("/login");
+        router.replace("/login");
         return;
       }
 
@@ -122,7 +118,7 @@ export default function MatchingPage() {
 
         setTimeout(() => {
           if (cancelled) return;
-          navigateHard("/ideal-match");
+          router.replace("/ideal-match");
         }, waitMinimum());
       } catch (e) {
         console.error("[Matching] find-ideal 에러:", e);
@@ -136,14 +132,14 @@ export default function MatchingPage() {
             toast.error("로그인이 만료됐어요", {
               description: "다시 로그인한 뒤 시도해주세요.",
             });
-            navigateHard("/login");
+            router.replace("/login");
             return;
           }
           if (e instanceof ApiError && e.status === 400) {
             toast.error("사주 정보가 필요해요", {
               description: e.message || "먼저 사주를 입력해주세요.",
             });
-            navigateHard("/saju-input");
+            router.replace("/saju-input");
             return;
           }
           if (e instanceof ApiError && e.status === 0) {
@@ -151,7 +147,7 @@ export default function MatchingPage() {
             toast.error("응답이 오지 않았어요", {
               description: "네트워크 상태를 확인한 뒤 다시 시도해주세요.",
             });
-            navigateHard("/preferences");
+            router.replace("/preferences");
             return;
           }
 
@@ -159,7 +155,7 @@ export default function MatchingPage() {
           toast.error("이상형 탐색에 실패했어요", {
             description: `잠시 후 다시 시도해주세요. (${msg})`,
           });
-          navigateHard("/preferences");
+          router.replace("/preferences");
         }, waitMinimum());
       }
     };
@@ -170,7 +166,7 @@ export default function MatchingPage() {
       cancelled = true;
       clearInterval(tick);
     };
-  }, [hydrated]);
+  }, [hydrated, router]);
 
   const stage = pickStage(elapsedMs);
   const progressPct = Math.min((elapsedMs / PROGRESS_FULL_MS) * 100, 100);

@@ -1,5 +1,6 @@
 "use client";
 
+import { useRouter } from "next/navigation";
 import { useEffect } from "react";
 import { useAuthStore } from "@/stores/authStore";
 import { apiClient } from "@/lib/api";
@@ -12,11 +13,13 @@ import { apiClient } from "@/lib/api";
  * - 이미 authStore 에 토큰이 있으면 launch URL 은 재처리하지 않는다 —
  *   getLaunchUrl 은 앱 종료 전까지 같은 URL 을 반환하므로 매 페이지 마운트마다
  *   재처리하면 무한 루프.
- * - 라우팅은 `window.location.href` 로 하드 내비 — Next.js static export 환경에서
- *   client-side router.replace() 가 실패하는 케이스 회피.
+ * - 라우팅은 next/navigation 의 router.replace 로 클라이언트 사이드 처리.
+ *   window.location.href 로 하드 내비하면 Capacitor 의 CapacitorRouter 가
+ *   확장자 없는 경로를 무조건 /index.html (랜딩) 로 라우팅하여 stuck 됨.
  * - 웹 환경에선 즉시 리턴.
  */
 export function NativeBridge() {
+  const router = useRouter();
   useEffect(() => {
     const cap = (window as unknown as { Capacitor?: { isNativePlatform?: () => boolean } }).Capacitor;
     const isNative = cap?.isNativePlatform?.() ?? false;
@@ -50,8 +53,8 @@ export function NativeBridge() {
           isPremium: me.isPremium,
         });
 
-        const target = isNew || !me.isOnboardingComplete ? "/saju-input/" : "/home/";
-        window.location.href = target;
+        const target = isNew || !me.isOnboardingComplete ? "/saju-input" : "/home";
+        router.replace(target);
       } catch (err) {
         console.error("[NativeBridge] handleUrl 실패:", err);
       }
@@ -82,7 +85,7 @@ export function NativeBridge() {
     return () => {
       handle?.remove();
     };
-  }, []);
+  }, [router]);
 
   return null;
 }
