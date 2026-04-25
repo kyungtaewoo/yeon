@@ -1,4 +1,4 @@
-const CACHE_NAME = "yeon-v1";
+const CACHE_NAME = "yeon-v2";
 const STATIC_ASSETS = [
   "/",
   "/login",
@@ -50,13 +50,12 @@ self.addEventListener("fetch", (event) => {
         return response;
       })
       .catch(() => {
-        // 네트워크 실패 시 캐시에서 반환
+        // 네트워크 실패 시 캐시에서 반환. 캐시도 없으면 503.
+        // 과거에 navigate 요청을 무조건 "/" 로 보내는 fallback 이 있었으나,
+        // 정적 export + Capacitor 환경에서 SW 가 fetch 가로채는 케이스에 잘못된
+        // 페이지로 빠지게 만들어 제거.
         return caches.match(request).then((cached) => {
           if (cached) return cached;
-          // 네비게이션 요청이면 홈으로 fallback
-          if (request.mode === "navigate") {
-            return caches.match("/");
-          }
           return new Response("Offline", { status: 503 });
         });
       })
