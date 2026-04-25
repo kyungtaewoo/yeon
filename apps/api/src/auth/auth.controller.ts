@@ -1,7 +1,7 @@
 import { Controller, Post, Get, Body, Query, Res, UseGuards, Request } from '@nestjs/common';
 import type { Response } from 'express';
 import { ConfigService } from '@nestjs/config';
-import { AuthService } from './auth.service';
+import { AuthService, KakaoCodeAlreadyUsedError } from './auth.service';
 import { JwtAuthGuard } from './guards/jwt-auth.guard';
 
 @Controller('auth')
@@ -62,12 +62,23 @@ export class AuthController {
         `yeonapp://auth?token=${result.accessToken}&isNew=${result.isNewUser}`,
       );
     } catch (error: any) {
-      res.status(400).send(`
-        <html>
-        <body style="font-family:sans-serif;text-align:center;padding:60px 20px;">
-          <h2>로그인 실패</h2>
-          <p>${error.message}</p>
-          <a href="javascript:window.close()">닫기</a>
+      const isAlreadyUsed = error instanceof KakaoCodeAlreadyUsedError;
+      const isNativeApp = state === 'app';
+      const message = isAlreadyUsed
+        ? '이미 처리된 로그인이에요. 앱으로 돌아가서 다시 시도해주세요.'
+        : (error?.message || '로그인 처리 중 오류가 발생했어요.');
+      const cta = isNativeApp
+        ? `<a href="yeonapp://" style="display:inline-block;margin-top:24px;padding:14px 28px;background:#FEE500;color:#191919;text-decoration:none;border-radius:10px;font-weight:600;">앱으로 돌아가기</a>`
+        : `<a href="javascript:window.close()" style="color:#666;">닫기</a>`;
+
+      res.status(isAlreadyUsed ? 200 : 400).send(`
+        <!doctype html>
+        <html lang="ko">
+        <head><meta charset="utf-8" /><meta name="viewport" content="width=device-width,initial-scale=1" /></head>
+        <body style="font-family:-apple-system,system-ui,sans-serif;text-align:center;padding:60px 24px;color:#333;">
+          <h2 style="font-size:20px;margin:0 0 12px;">${isAlreadyUsed ? '이미 로그인 처리됨' : '로그인 실패'}</h2>
+          <p style="font-size:14px;color:#666;line-height:1.5;">${message}</p>
+          ${cta}
         </body>
         </html>
       `);
