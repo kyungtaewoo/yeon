@@ -3,6 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useEffect } from "react";
 import { useAuthStore } from "@/stores/authStore";
+import { useOnboardingStore } from "@/stores/onboardingStore";
 import { apiClient } from "@/lib/api";
 
 /**
@@ -34,7 +35,6 @@ export function NativeBridge() {
         if (url.hostname !== "auth") return;
 
         const token = url.searchParams.get("token");
-        const isNew = url.searchParams.get("isNew") === "true";
         if (!token) return;
 
         const me = await apiClient<{
@@ -53,7 +53,33 @@ export function NativeBridge() {
           isPremium: me.isPremium,
         });
 
-        const target = isNew || !me.isOnboardingComplete ? "/saju-input" : "/home";
+        // 데모 모드에서 사주 이미 입력했으면 백엔드에 동기화 + onboarding 완료 처리.
+        // 다시 saju-input 으로 보내지 않도록.
+        let onboardingComplete = me.isOnboardingComplete;
+        if (!onboardingComplete) {
+          const { birthYear, birthMonth, birthDay, birthHour, isLunar } =
+            useOnboardingStore.getState();
+          if (birthYear && birthMonth && birthDay) {
+            try {
+              await apiClient("/saju/calculate-and-save", {
+                method: "POST",
+                token,
+                body: {
+                  year: birthYear,
+                  month: birthMonth,
+                  day: birthDay,
+                  hour: birthHour,
+                  isLunar,
+                },
+              });
+              onboardingComplete = true;
+            } catch (syncErr) {
+              console.warn("[NativeBridge] 데모 사주 동기화 실패:", syncErr);
+            }
+          }
+        }
+
+        const target = onboardingComplete ? "/home" : "/saju-input";
         router.replace(target);
       } catch (err) {
         console.error("[NativeBridge] handleUrl 실패:", err);

@@ -3,6 +3,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { SajuProfile } from './entities/saju-profile.entity';
 import { MatchingService } from '../matching/matching.service';
+import { UsersService } from '../users/users.service';
 import {
   calculatePillars,
   generateReport,
@@ -42,6 +43,7 @@ export class SajuService {
     @InjectRepository(SajuProfile)
     private readonly sajuRepo: Repository<SajuProfile>,
     private readonly matchingService: MatchingService,
+    private readonly usersService: UsersService,
   ) {}
 
   /** 사주팔자 산출 + 리포트 생성 (비로그인도 가능) */
@@ -93,6 +95,9 @@ export class SajuService {
     }
 
     const saved = await this.sajuRepo.findOne({ where: { userId } });
+
+    // 사주가 저장됐으므로 온보딩 완료로 표시 (사주가 핵심 온보딩 데이터)
+    await this.usersService.update(userId, { isOnboardingComplete: true });
 
     // 사주가 방금 저장/갱신됐으므로 양방향 매칭 스캔
     await this.matchingService.scanAndCreateMatches(userId);
