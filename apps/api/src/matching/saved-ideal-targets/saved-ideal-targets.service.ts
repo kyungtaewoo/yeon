@@ -1,11 +1,11 @@
-import {
-  BadRequestException, ConflictException, Injectable, NotFoundException,
-} from '@nestjs/common';
+import { HttpStatus, Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { SavedIdealTarget } from '../entities/saved-ideal-target.entity';
 import { User } from '../../users/entities/user.entity';
 import { CreateSavedIdealTargetDto } from './dto/create-saved-ideal-target.dto';
+import { ApiException } from '../../common/errors/api-exception';
+import { SAVED_IDEAL_TARGET_ERROR_CODES } from './error-codes';
 
 /**
  * 회원 등급별 wish-list 등록 가능 개수 — 서버가 source of truth.
@@ -46,8 +46,8 @@ export class SavedIdealTargetsService {
    *
    * 동시성 옵션 (b) — count → insert → unique violation 처리.
    *   1) user 조회 (+ tier 확인)
-   *   2) count 검사 → limit 초과 시 409
-   *   3) insert → unique 제약 위반 시 409 (dedup)
+   *   2) count 검사 → limit 초과 시 409 LIMIT_EXCEEDED (details 에 current/limit/tier)
+   *   3) insert → unique 제약 위반 시 409 DUPLICATE (details.existingId 포함, best-effort)
    *
    * 같은 유저가 짧은 간격에 동시 호출하면 step 2 통과 후 step 3 둘 다 성공해
    * limit + 1 개가 될 수 있음 — UI 단일 클릭 흐름 가정한 MVP 한계.
@@ -55,20 +55,33 @@ export class SavedIdealTargetsService {
    */
   async create(userId: string, dto: CreateSavedIdealTargetDto): Promise<SavedIdealTarget> {
     if (dto.ageMax < dto.ageMin) {
-      // class-validator 가 cross-field 검증을 안 해서 서비스에서 가드.
-      throw new BadRequestException('ageMax 는 ageMin 보다 작을 수 없습니다');
+      throw new ApiException(
+        HttpStatus.BAD_REQUEST,
+        SAVED_IDEAL_TARGET_ERROR_CODES.INVALID_AGE_RANGE,
+        'ageMax 는 ageMin 보다 작을 수 없습니다',
+      );
     }
 
     const user = await this.userRepo.findOne({ where: { id: userId } });
-    if (!user) throw new NotFoundException('사용자를 찾을 수 없습니다');
+    if (!user) {
+      throw new ApiException(
+        HttpStatus.NOT_FOUND,
+        SAVED_IDEAL_TARGET_ERROR_CODES.USER_NOT_FOUND,
+        '사용자를 찾을 수 없습니다',
+      );
+    }
 
-    const limit = user.isPremium
-      ? SAVED_IDEAL_TARGET_LIMITS.premium
-      : SAVED_IDEAL_TARGET_LIMITS.free;
+    const tier: SavedIdealTargetTier = user.isPremium ? 'premium' : 'free';
+    const limit = SAVED_IDEAL_TARGET_LIMITS[tier];
 
     const count = await this.repo.count({ where: { userId } });
     if (count >= limit) {
-      throw new ConflictException(`매칭 대상은 최대 ${limit}개까지 등록 가능합니다`);
+      throw new ApiException(
+        HttpStatus.CONFLICT,
+        SAVED_IDEAL_TARGET_ERROR_CODES.LIMIT_EXCEEDED,
+        '저장 가능한 인연이 가득 찼어요',
+        { current: count, limit, tier },
+      );
     }
 
     try {
@@ -85,7 +98,13 @@ export class SavedIdealTargetsService {
       return await this.repo.save(entity);
     } catch (err: unknown) {
       if (isPgUniqueViolation(err)) {
-        throw new ConflictException('이미 같은 후보가 저장되어 있습니다');
+        // existingId 는 의도적으로 빼둠 — 클라는 hydrate 후 목록에서 자연스럽게 참조.
+        // "중복 항목 강조 UX" 가 생기면 그때 SELECT 추가 (apps/web hydrate 만으로 충분).
+        throw new ApiException(
+          HttpStatus.CONFLICT,
+          SAVED_IDEAL_TARGET_ERROR_CODES.DUPLICATE,
+          '이미 담아둔 인연이에요',
+        );
       }
       throw err;
     }
@@ -97,7 +116,13 @@ export class SavedIdealTargetsService {
    */
   async getMyList(userId: string): Promise<SavedIdealTargetListResponse> {
     const user = await this.userRepo.findOne({ where: { id: userId } });
-    if (!user) throw new NotFoundException('사용자를 찾을 수 없습니다');
+    if (!user) {
+      throw new ApiException(
+        HttpStatus.NOT_FOUND,
+        SAVED_IDEAL_TARGET_ERROR_CODES.USER_NOT_FOUND,
+        '사용자를 찾을 수 없습니다',
+      );
+    }
 
     const items = await this.repo.find({
       where: { userId },
@@ -114,11 +139,15 @@ export class SavedIdealTargetsService {
     };
   }
 
-  /** 본인 소유 항목 1개 삭제. 다른 사람 것 / 미존재 시 404. */
+  /** 본인 소유 항목 1개 삭제. 다른 사람 것 / 미존재 시 404 TARGET_NOT_FOUND. */
   async remove(userId: string, id: string): Promise<void> {
     const result = await this.repo.delete({ id, userId });
     if (!result.affected) {
-      throw new NotFoundException('해당 매칭 대상이 없습니다');
+      throw new ApiException(
+        HttpStatus.NOT_FOUND,
+        SAVED_IDEAL_TARGET_ERROR_CODES.TARGET_NOT_FOUND,
+        '해당 매칭 대상이 없습니다',
+      );
     }
   }
 }

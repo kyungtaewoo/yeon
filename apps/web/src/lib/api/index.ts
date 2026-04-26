@@ -10,8 +10,18 @@ export interface RequestOptions {
   timeoutMs?: number;
 }
 
+/**
+ * API 에러 — 백엔드 ApiException(`code`, `details`) 도 보존.
+ * 호출부는 `code` 로 도메인 분기하고 `details` 로 컨텍스트 활용 (e.g. tier).
+ * 타임아웃/네트워크 실패 등 백엔드 응답이 없는 케이스는 code/details 가 undefined.
+ */
 export class ApiError extends Error {
-  constructor(public status: number, message: string) {
+  constructor(
+    public status: number,
+    message: string,
+    public code?: string,
+    public details?: Record<string, unknown>,
+  ) {
     super(message);
     this.name = 'ApiError';
   }
@@ -49,7 +59,12 @@ export async function apiClient<T = unknown>(
 
     if (!res.ok) {
       const err = await res.json().catch(() => ({ message: `HTTP ${res.status}` }));
-      throw new ApiError(res.status, err.message || `HTTP ${res.status}`);
+      throw new ApiError(
+        res.status,
+        err.message || `HTTP ${res.status}`,
+        typeof err.code === 'string' ? err.code : undefined,
+        err.details && typeof err.details === 'object' ? err.details : undefined,
+      );
     }
 
     // 204 등 빈 응답 처리

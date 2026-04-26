@@ -1,3 +1,4 @@
+// TODO: ApiException 패턴으로 점진 마이그레이션 (apps/api/src/common/errors/api-exception.ts 참고)
 import { Injectable, NotFoundException, ForbiddenException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';

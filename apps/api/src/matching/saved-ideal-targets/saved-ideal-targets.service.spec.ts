@@ -1,5 +1,4 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { BadRequestException, ConflictException, NotFoundException } from '@nestjs/common';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import {
@@ -9,6 +8,8 @@ import {
 import { SavedIdealTarget } from '../entities/saved-ideal-target.entity';
 import { User } from '../../users/entities/user.entity';
 import { CreateSavedIdealTargetDto } from './dto/create-saved-ideal-target.dto';
+import { ApiException } from '../../common/errors/api-exception';
+import { SAVED_IDEAL_TARGET_ERROR_CODES } from './error-codes';
 
 type MockRepo<T extends object = any> = Partial<
   Record<keyof Repository<T>, jest.Mock>
@@ -41,6 +42,12 @@ const buildDto = (overrides: Partial<CreateSavedIdealTargetDto> = {}): CreateSav
   profile: { rank: 1 },
   ...overrides,
 });
+
+const captureError = async (promise: Promise<unknown>): Promise<ApiException> => {
+  const err = await promise.catch((e) => e);
+  expect(err).toBeInstanceOf(ApiException);
+  return err as ApiException;
+};
 
 describe('SavedIdealTargetsService', () => {
   let service: SavedIdealTargetsService;
@@ -92,41 +99,57 @@ describe('SavedIdealTargetsService', () => {
     });
 
     // 3
-    it('비프리미엄 limit 도달 (count=3) → ConflictException', async () => {
+    it('비프리미엄 limit 도달 (count=3) → ApiException 409 LIMIT_EXCEEDED + details', async () => {
       userRepo.findOne!.mockResolvedValue(buildUser({ isPremium: false }));
       repo.count!.mockResolvedValue(SAVED_IDEAL_TARGET_LIMITS.free);
 
-      await expect(service.create(USER_ID, buildDto())).rejects.toThrow(ConflictException);
+      const err = await captureError(service.create(USER_ID, buildDto()));
+      expect(err.getStatus()).toBe(409);
+      expect(err.getResponse()).toMatchObject({
+        code: SAVED_IDEAL_TARGET_ERROR_CODES.LIMIT_EXCEEDED,
+        details: { current: 3, limit: 3, tier: 'free' },
+      });
       expect(repo.save).not.toHaveBeenCalled();
     });
 
     // 4
-    it('프리미엄 limit 도달 (count=10) → ConflictException', async () => {
+    it('프리미엄 limit 도달 (count=10) → ApiException 409 LIMIT_EXCEEDED + tier=premium', async () => {
       userRepo.findOne!.mockResolvedValue(buildUser({ isPremium: true }));
       repo.count!.mockResolvedValue(SAVED_IDEAL_TARGET_LIMITS.premium);
 
-      await expect(service.create(USER_ID, buildDto())).rejects.toThrow(ConflictException);
+      const err = await captureError(service.create(USER_ID, buildDto()));
+      expect(err.getStatus()).toBe(409);
+      expect(err.getResponse()).toMatchObject({
+        code: SAVED_IDEAL_TARGET_ERROR_CODES.LIMIT_EXCEEDED,
+        details: { current: 10, limit: 10, tier: 'premium' },
+      });
       expect(repo.save).not.toHaveBeenCalled();
     });
 
     // 5
-    it('dedup 충돌 (PG 23505) → ConflictException("이미 같은 후보")', async () => {
+    it('dedup 충돌 (PG 23505) → ApiException 409 DUPLICATE (details 없음)', async () => {
       userRepo.findOne!.mockResolvedValue(buildUser());
       repo.count!.mockResolvedValue(0);
       repo.create!.mockReturnValue({} as SavedIdealTarget);
       const pgErr = Object.assign(new Error('duplicate key'), { code: '23505' });
       repo.save!.mockRejectedValue(pgErr);
 
-      await expect(service.create(USER_ID, buildDto())).rejects.toMatchObject({
-        message: expect.stringContaining('이미 같은 후보'),
-      });
+      const err = await captureError(service.create(USER_ID, buildDto()));
+      expect(err.getStatus()).toBe(409);
+      const body = err.getResponse() as Record<string, unknown>;
+      expect(body.code).toBe(SAVED_IDEAL_TARGET_ERROR_CODES.DUPLICATE);
+      expect(body.details).toBeUndefined();
     });
 
     // 6
-    it('존재하지 않는 user → NotFoundException', async () => {
+    it('존재하지 않는 user → ApiException 404 USER_NOT_FOUND', async () => {
       userRepo.findOne!.mockResolvedValue(null);
 
-      await expect(service.create(USER_ID, buildDto())).rejects.toThrow(NotFoundException);
+      const err = await captureError(service.create(USER_ID, buildDto()));
+      expect(err.getStatus()).toBe(404);
+      expect(err.getResponse()).toMatchObject({
+        code: SAVED_IDEAL_TARGET_ERROR_CODES.USER_NOT_FOUND,
+      });
       expect(repo.count).not.toHaveBeenCalled();
     });
 
@@ -142,10 +165,14 @@ describe('SavedIdealTargetsService', () => {
     });
 
     // 8
-    it('ageMax < ageMin 이면 BadRequestException (서비스 레벨 cross-field 가드)', async () => {
-      await expect(
+    it('ageMax < ageMin → ApiException 400 INVALID_AGE_RANGE (user 조회 전에)', async () => {
+      const err = await captureError(
         service.create(USER_ID, buildDto({ ageMin: 40, ageMax: 30 })),
-      ).rejects.toThrow(BadRequestException);
+      );
+      expect(err.getStatus()).toBe(400);
+      expect(err.getResponse()).toMatchObject({
+        code: SAVED_IDEAL_TARGET_ERROR_CODES.INVALID_AGE_RANGE,
+      });
       expect(userRepo.findOne).not.toHaveBeenCalled();
     });
   });
@@ -199,10 +226,14 @@ describe('SavedIdealTargetsService', () => {
     });
 
     // 12
-    it('존재하지 않는 user → NotFoundException', async () => {
+    it('존재하지 않는 user → ApiException 404 USER_NOT_FOUND', async () => {
       userRepo.findOne!.mockResolvedValue(null);
 
-      await expect(service.getMyList(USER_ID)).rejects.toThrow(NotFoundException);
+      const err = await captureError(service.getMyList(USER_ID));
+      expect(err.getStatus()).toBe(404);
+      expect(err.getResponse()).toMatchObject({
+        code: SAVED_IDEAL_TARGET_ERROR_CODES.USER_NOT_FOUND,
+      });
       expect(repo.find).not.toHaveBeenCalled();
     });
   });
@@ -217,10 +248,14 @@ describe('SavedIdealTargetsService', () => {
     });
 
     // 14
-    it('다른 사람 것 / 미존재 → NotFoundException (affected=0)', async () => {
+    it('다른 사람 것 / 미존재 → ApiException 404 TARGET_NOT_FOUND', async () => {
       repo.delete!.mockResolvedValue({ affected: 0, raw: {} });
 
-      await expect(service.remove(USER_ID, 'target-id')).rejects.toThrow(NotFoundException);
+      const err = await captureError(service.remove(USER_ID, 'target-id'));
+      expect(err.getStatus()).toBe(404);
+      expect(err.getResponse()).toMatchObject({
+        code: SAVED_IDEAL_TARGET_ERROR_CODES.TARGET_NOT_FOUND,
+      });
     });
   });
 });

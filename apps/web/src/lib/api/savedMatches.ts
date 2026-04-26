@@ -1,4 +1,13 @@
 import { apiClient, ApiError } from '.';
+import {
+  LimitExceededDetails,
+  SAVED_MATCHES_ERROR_CODES,
+  SavedMatchesDuplicateError,
+  SavedMatchesLimitExceededError,
+  SavedMatchesNetworkError,
+  SavedMatchesUnauthorizedError,
+  SavedMatchesValidationError,
+} from './errors';
 
 export type SavedIdealTargetStatus = 'searching' | 'matched' | 'archived';
 
@@ -37,69 +46,42 @@ export interface CreateSavedIdealTargetPayload {
   profile: Record<string, unknown>;
 }
 
-// ---------------------------------------------------------------------------
-// 도메인 에러 — 토스트 톤 가이드대로 호출부에서 분기 처리.
-// ---------------------------------------------------------------------------
-
-export class SavedMatchesLimitExceededError extends Error {
-  readonly code = 'LIMIT_EXCEEDED' as const;
-  constructor(message: string) {
-    super(message);
-    this.name = 'SavedMatchesLimitExceededError';
-  }
-}
-
-export class SavedMatchesDuplicateError extends Error {
-  readonly code = 'DUPLICATE' as const;
-  constructor(message: string) {
-    super(message);
-    this.name = 'SavedMatchesDuplicateError';
-  }
-}
-
-export class SavedMatchesUnauthorizedError extends Error {
-  readonly code = 'UNAUTHORIZED' as const;
-  constructor(message: string) {
-    super(message);
-    this.name = 'SavedMatchesUnauthorizedError';
-  }
-}
-
-export class SavedMatchesNetworkError extends Error {
-  readonly code = 'NETWORK' as const;
-  constructor(message: string) {
-    super(message);
-    this.name = 'SavedMatchesNetworkError';
-  }
-}
-
 /**
  * ApiError → 도메인 에러 매핑.
  *
- * 백엔드 (apps/api/src/matching/saved-ideal-targets/saved-ideal-targets.service.ts)
- * 가 던지는 두 종류의 409 를 메시지 prefix 로 구분한다:
- *   - "매칭 대상은 최대 N개까지 등록 가능합니다" → LIMIT_EXCEEDED
- *   - "이미 같은 후보가 저장되어 있습니다"      → DUPLICATE
- *
- * 메시지 변경 시 이 함수도 같이 업데이트할 것 (백엔드 코드에 i18n 키 도입하면 견고).
+ * 백엔드 ApiException 의 `code` 필드 기준으로 분기 — 메시지 prefix 매칭에서 졸업.
+ * 백엔드 코드 enum 변경 시 errors.ts 의 SAVED_MATCHES_ERROR_CODES 도 함께 수정.
  */
 export function mapSavedMatchesError(err: unknown): never {
   if (err instanceof ApiError) {
+    // 401: code 가 없을 수도 있음 (Passport 기본 응답)
     if (err.status === 401) {
-      throw new SavedMatchesUnauthorizedError(err.message || '로그인이 필요해요');
+      throw new SavedMatchesUnauthorizedError(err.message || '다시 로그인이 필요해요');
     }
-    if (err.status === 409) {
-      const msg = err.message || '';
-      if (msg.includes('이미') || msg.includes('같은 후보')) {
-        throw new SavedMatchesDuplicateError(msg);
+
+    switch (err.code) {
+      case SAVED_MATCHES_ERROR_CODES.LIMIT_EXCEEDED: {
+        const details = err.details as LimitExceededDetails | undefined;
+        if (!details) {
+          // 방어적 기본값 — 백엔드 누락 시 free 가정
+          throw new SavedMatchesLimitExceededError(err.message, {
+            current: 0,
+            limit: 3,
+            tier: 'free',
+          });
+        }
+        throw new SavedMatchesLimitExceededError(err.message, details);
       }
-      // 나머지 409 는 limit 으로 본다 (현재 백엔드 기준)
-      throw new SavedMatchesLimitExceededError(msg);
+      case SAVED_MATCHES_ERROR_CODES.DUPLICATE:
+        throw new SavedMatchesDuplicateError(err.message);
+      case SAVED_MATCHES_ERROR_CODES.INVALID_AGE_RANGE:
+        throw new SavedMatchesValidationError(err.message);
     }
+
     if (err.status === 0 || err.status >= 500) {
       throw new SavedMatchesNetworkError(err.message);
     }
-    // 400/404 등은 그대로 노출 (호출부가 ApiError 로 처리)
+    // USER_NOT_FOUND / TARGET_NOT_FOUND / 기타 4xx — 그대로 노출
     throw err;
   }
   if (err instanceof Error) {
@@ -142,3 +124,14 @@ export async function remove(token: string, id: string): Promise<void> {
     mapSavedMatchesError(err);
   }
 }
+
+// 에러 클래스 re-export — 호출부가 한 모듈에서 모두 import 가능하도록.
+export {
+  SAVED_MATCHES_ERROR_CODES,
+  SavedMatchesDuplicateError,
+  SavedMatchesLimitExceededError,
+  SavedMatchesNetworkError,
+  SavedMatchesUnauthorizedError,
+  SavedMatchesValidationError,
+} from './errors';
+export type { LimitExceededDetails, SavedMatchesErrorCode } from './errors';
