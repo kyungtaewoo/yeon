@@ -8,6 +8,8 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { useOnboardingStore } from "@/stores/onboardingStore";
 import { useSavedMatchesStore, getSavedMatchLimit } from "@/stores/savedMatchesStore";
+import { useAuthStore } from "@/stores/authStore";
+import { handleAddError } from "@/lib/savedMatches/errorToasts";
 import { usePremium } from "@/hooks/usePremium";
 import { STEM_TO_ELEMENT, ELEMENT_NAMES, STEM_KOREAN, BRANCH_KOREAN } from "@/lib/saju/constants";
 import type { IdealMatchProfileV2 } from "@/lib/saju/reverseMatch-v2";
@@ -235,9 +237,11 @@ function ProfileCard({
 export default function IdealMatchPage() {
   const router = useRouter();
   const { idealProfiles } = useOnboardingStore();
-  const { matches: savedMatches, add: addSavedMatch } = useSavedMatchesStore();
+  const savedMatches = useSavedMatchesStore((s) => s.matches);
+  const meta = useSavedMatchesStore((s) => s.meta);
   const { isPremium } = usePremium();
-  const limit = getSavedMatchLimit(isPremium);
+  // 백엔드 meta 가 권위 — 없으면 클라 등급 기준 fallback (비로그인 / hydrate 전).
+  const limit = meta?.limit ?? getSavedMatchLimit(isPremium);
   const [showAll, setShowAll] = useState(false);
 
   // zustand persist hydration race 방어 — 하드 내비로 들어온 직후 첫 렌더 시
@@ -273,8 +277,11 @@ export default function IdealMatchPage() {
     `-${p.pillars.hour ? `${p.pillars.hour.stem}${p.pillars.hour.branch}` : "??"}`;
   const savedKeys = new Set(savedMatches.map((m) => matchKey(m.profile)));
 
-  const handleSelect = (profile: IdealMatchProfileV2) => {
-    if (savedMatches.length >= limit) {
+  const handleSelect = async (profile: IdealMatchProfileV2) => {
+    const token = useAuthStore.getState().token;
+
+    // 비로그인 사전 한도 체크 — 로그인은 백엔드 LIMIT_EXCEEDED 가 권위라 사전 체크 X.
+    if (!token && savedMatches.length >= limit) {
       toast.error(`매칭 대상은 최대 ${limit}개까지 등록할 수 있어요`, {
         description: isPremium
           ? "기존 매칭 대상을 삭제한 뒤 다시 시도해주세요."
@@ -285,11 +292,16 @@ export default function IdealMatchPage() {
       });
       return;
     }
-    addSavedMatch(profile);
-    toast.success("매칭 대상에 등록되었어요", {
-      description: `${savedMatches.length + 1}/${limit} · 매칭 탭에서 확인할 수 있어요.`,
-    });
-    router.push("/matches");
+
+    const result = await useSavedMatchesStore.getState().addOptimistic(profile, token);
+    if (result.ok) {
+      toast.success("내 인연 목록에 담았어요", {
+        description: "매칭 탭에서 확인할 수 있어요.",
+      });
+      router.push("/matches");
+      return;
+    }
+    handleAddError(result.error, router);
   };
 
   if (!hydrated) {

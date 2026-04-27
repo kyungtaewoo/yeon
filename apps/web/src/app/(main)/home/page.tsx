@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense, useEffect, useState } from "react";
+import { Suspense, useEffect, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -9,6 +9,7 @@ import { apiClient } from "@/lib/api";
 import { useAuth } from "@/hooks/useAuth";
 import { useAuthStore } from "@/stores/authStore";
 import { useOnboardingStore } from "@/stores/onboardingStore";
+import { postLoginSync } from "@/lib/auth/postLoginSync";
 import { ELEMENT_NAMES } from "@/lib/saju/constants";
 import type { Element } from "@/lib/saju/types";
 
@@ -31,11 +32,15 @@ function HomeInner() {
   const [ingestingToken, setIngestingToken] = useState(false);
 
   const isDemo = !user;
+  // dev StrictMode useEffect 이중 실행 방지 — 토큰 ingest 두 번 막음.
+  const ingestRanRef = useRef(false);
 
   // URL에 ?token=이 오면 authStore(localStorage)에 저장하고 URL에서 제거
   useEffect(() => {
     const urlToken = searchParams.get("token");
     if (!urlToken) return;
+    if (ingestRanRef.current) return;
+    ingestRanRef.current = true;
 
     setIngestingToken(true);
     (async () => {
@@ -48,6 +53,12 @@ function HomeInner() {
           isPremium: boolean;
         }>('/auth/me', { token: urlToken });
         useAuthStore.getState().setAuth(urlToken, me);
+
+        try {
+          await postLoginSync(urlToken);
+        } catch (e) {
+          console.warn("[postLoginSync] failed", e);
+        }
       } catch (err) {
         console.error("토큰 인증 실패:", err);
       } finally {

@@ -5,6 +5,7 @@ import { useEffect } from "react";
 import { useAuthStore } from "@/stores/authStore";
 import { useOnboardingStore } from "@/stores/onboardingStore";
 import { apiClient } from "@/lib/api";
+import { postLoginSync } from "@/lib/auth/postLoginSync";
 
 /**
  * Capacitor 네이티브 브릿지.
@@ -52,6 +53,14 @@ export function NativeBridge() {
           isOnboardingComplete: me.isOnboardingComplete,
           isPremium: me.isPremium,
         });
+
+        // 로컬 saved matches 를 백엔드로 마이그레이션 + 권위 데이터 hydrate.
+        // 실패해도 로그인 자체는 성공이므로 사용자 차단 X.
+        try {
+          await postLoginSync(token);
+        } catch (e) {
+          console.warn("[postLoginSync] failed", e);
+        }
 
         // 데모 모드에서 사주 이미 입력했으면 백엔드에 동기화 + onboarding 완료 처리.
         // 다시 saju-input 으로 보내지 않도록.

@@ -1,15 +1,21 @@
 "use client";
 
-import { Suspense, useEffect } from "react";
+import { Suspense, useEffect, useRef } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { apiClient } from "@/lib/api";
 import { useAuthStore } from "@/stores/authStore";
+import { postLoginSync } from "@/lib/auth/postLoginSync";
 
 function CallbackInner() {
   const router = useRouter();
   const searchParams = useSearchParams();
+  // dev StrictMode 의 useEffect 이중 실행 방지 — 토큰 교환을 두 번 하지 않도록.
+  const ranRef = useRef(false);
 
   useEffect(() => {
+    if (ranRef.current) return;
+    ranRef.current = true;
+
     const token = searchParams.get("token");
     const isNew = searchParams.get("isNew") === "true";
     const code = searchParams.get("code");
@@ -35,6 +41,12 @@ function CallbackInner() {
 
           useAuthStore.getState().setAuth(token, user);
           console.log("[Callback] setAuth done, store token present:", !!useAuthStore.getState().token);
+
+          try {
+            await postLoginSync(token);
+          } catch (e) {
+            console.warn("[postLoginSync] failed", e);
+          }
 
           const target = isNew || !user.isOnboardingComplete ? "/saju-input" : "/home";
           console.log("[Callback] routing to", target);
@@ -74,6 +86,12 @@ function CallbackInner() {
         });
 
         useAuthStore.getState().setAuth(data.accessToken, data.user);
+
+        try {
+          await postLoginSync(data.accessToken);
+        } catch (e) {
+          console.warn("[postLoginSync] failed", e);
+        }
 
         if (data.isNewUser || !data.user.isOnboardingComplete) {
           router.replace("/saju-input");

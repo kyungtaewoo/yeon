@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import "./globals.css";
 import { ServiceWorkerRegister } from "@/components/shared/ServiceWorkerRegister";
 import { NativeBridge } from "@/components/shared/NativeBridge";
+import { AppHydrator } from "@/components/shared/AppHydrator";
 import { Toaster } from "@/components/ui/sonner";
 
 export const metadata: Metadata = {
@@ -49,6 +50,7 @@ export default function RootLayout({
       <body className="min-h-full flex flex-col" style={{ fontFamily: "var(--font-sans)" }}>
         <ServiceWorkerRegister />
         <NativeBridge />
+        <AppHydrator />
         {children}
         <Toaster position="top-center" richColors />
       </body>

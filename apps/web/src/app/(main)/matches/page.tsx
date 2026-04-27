@@ -11,6 +11,8 @@ import {
   getSavedMatchLimit,
   type SavedMatch,
 } from "@/stores/savedMatchesStore";
+import { useAuthStore } from "@/stores/authStore";
+import { handleRemoveError } from "@/lib/savedMatches/errorToasts";
 import { usePremium } from "@/hooks/usePremium";
 import { STEM_TO_ELEMENT, ELEMENT_NAMES } from "@/lib/saju/constants";
 import type { Element } from "@/lib/saju/types";
@@ -39,7 +41,7 @@ function MatchCard({
   onRemove,
 }: {
   match: SavedMatch;
-  onRemove: (id: string) => void;
+  onRemove: (id: string) => void | Promise<void>;
 }) {
   const stemEl = STEM_TO_ELEMENT[match.profile.pillars.day.stem];
   const elName = ELEMENT_NAMES[stemEl];
@@ -96,10 +98,14 @@ function MatchCard({
 
 export default function MatchesPage() {
   const router = useRouter();
-  const { matches, remove } = useSavedMatchesStore();
+  const matches = useSavedMatchesStore((s) => s.matches);
+  const meta = useSavedMatchesStore((s) => s.meta);
+  const syncStatus = useSavedMatchesStore((s) => s.syncStatus);
   const { pillars } = useOnboardingStore();
   const { isPremium } = usePremium();
-  const limit = getSavedMatchLimit(isPremium);
+  const token = useAuthStore((s) => s.token);
+  // meta 가 권위 — 없으면 클라 등급 fallback (비로그인 / hydrate 전).
+  const limit = meta?.limit ?? getSavedMatchLimit(isPremium);
   const limitReached = matches.length >= limit;
   const [hydrated, setHydrated] = useState(false);
 
@@ -111,6 +117,11 @@ export default function MatchesPage() {
     const unsub = useSavedMatchesStore.persist.onFinishHydration(() => setHydrated(true));
     return unsub;
   }, []);
+
+  const handleRemove = async (id: string) => {
+    const result = await useSavedMatchesStore.getState().removeOptimistic(id, token);
+    if (!result.ok) handleRemoveError(result.error);
+  };
 
   const handleNewMatch = () => {
     if (limitReached) {
@@ -152,6 +163,13 @@ export default function MatchesPage() {
             매칭 대상 추가하기
           </Button>
         </div>
+
+        {/* 동기화 실패 배너 — persist 캐시로 폴백된 상태 안내 */}
+        {token && syncStatus === 'error' && matches.length > 0 && (
+          <div className="text-xs text-[var(--muted-foreground)] bg-[var(--muted)]/40 rounded-md px-3 py-2">
+            최신 데이터를 불러오지 못했어요. 새로고침 시 재시도됩니다.
+          </div>
+        )}
 
         {/* 한도 표시 + 프리미엄 안내 */}
         <Card className="border-none shadow-sm bg-[var(--brand-gold)]/5">
@@ -200,11 +218,29 @@ export default function MatchesPage() {
           ) : (
             <div className="space-y-3">
               {matches.map((m) => (
-                <MatchCard key={m.id} match={m} onRemove={remove} />
+                <MatchCard key={m.id} match={m} onRemove={handleRemove} />
               ))}
             </div>
           )}
         </div>
+
+        {/* 비로그인 CTA — 다른 기기 동기화 안내 */}
+        {!token && matches.length > 0 && (
+          <Card className="border border-dashed border-[var(--brand-gold)]/50 bg-[var(--brand-gold)]/5">
+            <CardContent className="py-4 text-center space-y-2">
+              <p className="text-sm text-[var(--foreground)]">
+                로그인하면 다른 기기에서도 볼 수 있어요
+              </p>
+              <Button
+                onClick={() => router.push("/login")}
+                size="sm"
+                className="bg-[#FEE500] text-[#191919] hover:bg-[#FDD835] text-xs font-bold"
+              >
+                카카오로 로그인
+              </Button>
+            </CardContent>
+          </Card>
+        )}
       </div>
     </div>
   );
