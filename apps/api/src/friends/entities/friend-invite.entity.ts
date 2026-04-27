@@ -1,8 +1,9 @@
 import {
   Entity, PrimaryGeneratedColumn, Column,
-  CreateDateColumn, ManyToOne, JoinColumn, Index,
+  CreateDateColumn, ManyToOne, OneToOne, JoinColumn, Index,
 } from 'typeorm';
 import { User } from '../../users/entities/user.entity';
+import type { FriendCompatibility } from './friend-compatibility.entity';
 
 export type FriendInviteStatus =
   | 'pending'       // 코드 생성됨, 아직 수락 안 됨
@@ -39,6 +40,14 @@ export class FriendInvite {
 
   @Column({ type: 'timestamptz' })
   expiresAt: Date;
+
+  // inverse side — FriendCompatibility.invite 의 양방향. listMyInvites 의
+  // relations: ['compatibility'] 로 점수 prefetch 위해 필요. Eager 는 X (필요 시점에만).
+  @OneToOne(
+    'FriendCompatibility',
+    (compatibility: FriendCompatibility) => compatibility.invite,
+  )
+  compatibility?: FriendCompatibility | null;
 
   @CreateDateColumn()
   createdAt: Date;

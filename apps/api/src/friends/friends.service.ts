@@ -1,6 +1,4 @@
-import {
-  Injectable, NotFoundException, ForbiddenException, BadRequestException,
-} from '@nestjs/common';
+import { Injectable, HttpStatus } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { randomBytes } from 'crypto';
@@ -11,8 +9,10 @@ import {
   type FourPillars, type HeavenlyStem, type EarthlyBranch,
 } from '@yeon/saju-engine';
 import { SajuProfile } from '../saju/entities/saju-profile.entity';
+import { ApiException } from '../common/errors/api-exception';
 import { FriendInvite } from './entities/friend-invite.entity';
 import { FriendCompatibility } from './entities/friend-compatibility.entity';
+import { FRIEND_ERROR_CODES } from './error-codes';
 
 const INVITE_TTL_DAYS = 7;
 
@@ -51,7 +51,13 @@ export class FriendsService {
       if (!exists) break;
       code = '';
     }
-    if (!code) throw new BadRequestException('초대 코드 생성 실패 — 다시 시도해주세요');
+    if (!code) {
+      throw new ApiException(
+        HttpStatus.SERVICE_UNAVAILABLE,
+        FRIEND_ERROR_CODES.INVITE_GENERATION_FAILED,
+        '초대 코드 생성에 실패했어요. 잠시 후 다시 시도해주세요',
+      );
+    }
 
     const expiresAt = new Date();
     expiresAt.setDate(expiresAt.getDate() + INVITE_TTL_DAYS);
@@ -71,7 +77,13 @@ export class FriendsService {
       where: { inviteCode: code },
       relations: ['inviter'],
     });
-    if (!invite) throw new NotFoundException('초대 코드를 찾을 수 없습니다');
+    if (!invite) {
+      throw new ApiException(
+        HttpStatus.NOT_FOUND,
+        FRIEND_ERROR_CODES.INVITE_NOT_FOUND,
+        '초대 코드를 찾을 수 없어요',
+      );
+    }
 
     const expired = invite.expiresAt.getTime() < Date.now();
     return {
@@ -86,15 +98,33 @@ export class FriendsService {
   /** 초대 수락 — 양쪽 사주가 있으면 즉시 계산 */
   async acceptInvite(code: string, userId: string): Promise<FriendInvite> {
     const invite = await this.inviteRepo.findOne({ where: { inviteCode: code } });
-    if (!invite) throw new NotFoundException('초대 코드를 찾을 수 없습니다');
+    if (!invite) {
+      throw new ApiException(
+        HttpStatus.NOT_FOUND,
+        FRIEND_ERROR_CODES.INVITE_NOT_FOUND,
+        '초대 코드를 찾을 수 없어요',
+      );
+    }
     if (invite.inviterId === userId) {
-      throw new BadRequestException('본인의 초대는 수락할 수 없습니다');
+      throw new ApiException(
+        HttpStatus.BAD_REQUEST,
+        FRIEND_ERROR_CODES.SELF_INVITE,
+        '본인의 초대는 수락할 수 없어요',
+      );
     }
     if (invite.expiresAt.getTime() < Date.now()) {
-      throw new BadRequestException('만료된 초대입니다');
+      throw new ApiException(
+        HttpStatus.GONE,
+        FRIEND_ERROR_CODES.INVITE_EXPIRED,
+        '만료된 초대예요. 다시 초대해달라고 요청해주세요',
+      );
     }
     if (invite.inviteeId && invite.inviteeId !== userId) {
-      throw new BadRequestException('이미 다른 유저가 수락한 초대입니다');
+      throw new ApiException(
+        HttpStatus.CONFLICT,
+        FRIEND_ERROR_CODES.INVITE_ALREADY_ACCEPTED,
+        '이미 다른 친구가 수락한 초대예요',
+      );
     }
 
     invite.inviteeId = userId;
@@ -104,12 +134,12 @@ export class FriendsService {
     return this.tryComputeCompatibility(invite);
   }
 
-  /** 내가 관련된 친구 초대 리스트 */
+  /** 내가 관련된 친구 초대 리스트 — 카드 표시용으로 점수까지 prefetch */
   async listMyInvites(userId: string) {
     return this.inviteRepo.find({
       where: [{ inviterId: userId }, { inviteeId: userId }],
       order: { createdAt: 'DESC' },
-      relations: ['inviter', 'invitee'],
+      relations: ['inviter', 'invitee', 'compatibility'],
     });
   }
 
@@ -119,9 +149,19 @@ export class FriendsService {
       where: { id: inviteId },
       relations: ['inviter', 'invitee'],
     });
-    if (!invite) throw new NotFoundException('초대를 찾을 수 없습니다');
+    if (!invite) {
+      throw new ApiException(
+        HttpStatus.NOT_FOUND,
+        FRIEND_ERROR_CODES.INVITE_NOT_FOUND,
+        '초대를 찾을 수 없어요',
+      );
+    }
     if (invite.inviterId !== userId && invite.inviteeId !== userId) {
-      throw new ForbiddenException('이 초대에 대한 권한이 없습니다');
+      throw new ApiException(
+        HttpStatus.FORBIDDEN,
+        FRIEND_ERROR_CODES.INVITE_FORBIDDEN,
+        '이 초대를 볼 권한이 없어요',
+      );
     }
     const compatibility = await this.compatRepo.findOne({ where: { inviteId } });
     return { invite, compatibility };
@@ -130,9 +170,19 @@ export class FriendsService {
   /** 양쪽 사주가 이제 모였을 때 수동 재계산 */
   async recompute(inviteId: string, userId: string): Promise<FriendInvite> {
     const invite = await this.inviteRepo.findOne({ where: { id: inviteId } });
-    if (!invite) throw new NotFoundException('초대를 찾을 수 없습니다');
+    if (!invite) {
+      throw new ApiException(
+        HttpStatus.NOT_FOUND,
+        FRIEND_ERROR_CODES.INVITE_NOT_FOUND,
+        '초대를 찾을 수 없어요',
+      );
+    }
     if (invite.inviterId !== userId && invite.inviteeId !== userId) {
-      throw new ForbiddenException('이 초대에 대한 권한이 없습니다');
+      throw new ApiException(
+        HttpStatus.FORBIDDEN,
+        FRIEND_ERROR_CODES.INVITE_FORBIDDEN,
+        '이 초대를 볼 권한이 없어요',
+      );
     }
     return this.tryComputeCompatibility(invite);
   }
