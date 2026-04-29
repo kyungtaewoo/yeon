@@ -29,6 +29,15 @@ const nextConfig: NextConfig = {
           },
         ],
       },
+      {
+        // Apple Universal Links — iOS 가 fetch 하는 AASA 파일.
+        // 확장자가 없어서 Vercel 이 octet-stream 으로 서빙 → application/json 으로 강제.
+        source: "/.well-known/apple-app-site-association",
+        headers: [
+          { key: "Content-Type", value: "application/json" },
+          { key: "Cache-Control", value: "public, max-age=3600" },
+        ],
+      },
     ];
   },
 };

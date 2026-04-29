@@ -9,12 +9,16 @@ import { postLoginSync } from "@/lib/auth/postLoginSync";
 
 /**
  * Capacitor 네이티브 브릿지.
- * - 카카오 OAuth 콜백이 `yeonapp://auth?token=...&isNew=...`로 앱을 깨우면
- *   토큰을 authStore(localStorage)에 저장하고 적절한 경로로 이동한다.
- * - `appUrlOpen` (warm start) 와 `App.getLaunchUrl()` (cold start) 둘 다 처리한다.
- * - 이미 authStore 에 토큰이 있으면 launch URL 은 재처리하지 않는다 —
- *   getLaunchUrl 은 앱 종료 전까지 같은 URL 을 반환하므로 매 페이지 마운트마다
- *   재처리하면 무한 루프.
+ * 처리하는 URL 종류:
+ *   1) yeonapp://auth?token=...&isNew=...  카카오 OAuth 콜백
+ *   2) https://yeonapp.com/invite/CODE     친구 초대 Universal Link
+ *   3) yeonapp://invite?code=CODE          (예비) 커스텀 스킴 초대
+ *
+ * - `appUrlOpen` (warm start) 와 `App.getLaunchUrl()` (cold start) 둘 다 처리.
+ * - auth 분기는 토큰 이미 있으면 launch URL 재처리 X (getLaunchUrl 은 앱 종료
+ *   전까지 같은 URL 을 반환 → 매 페이지 마운트마다 재처리하면 무한 루프).
+ * - invite 분기는 비로그인이어도 /invite/[code] 환영 페이지로 보냄 (그 페이지에서
+ *   자체적으로 로그인 유도).
  * - 라우팅은 next/navigation 의 router.replace 로 클라이언트 사이드 처리.
  *   window.location.href 로 하드 내비하면 Capacitor 의 CapacitorRouter 가
  *   확장자 없는 경로를 무조건 /index.html (랜딩) 로 라우팅하여 stuck 됨.
@@ -29,10 +33,34 @@ export function NativeBridge() {
 
     let handle: { remove: () => void } | undefined;
 
+    const handleInviteUrl = (code: string) => {
+      if (!code) return;
+      router.replace(`/invite/${encodeURIComponent(code)}`);
+    };
+
     const handleUrl = async (rawUrl: string) => {
       try {
         const url = new URL(rawUrl);
+
+        // Universal Link: https://yeonapp.com/invite/CODE
+        if (
+          url.protocol === "https:" &&
+          url.hostname === "yeonapp.com" &&
+          url.pathname.startsWith("/invite/")
+        ) {
+          const code = url.pathname.split("/invite/")[1]?.split("/")[0] ?? "";
+          handleInviteUrl(code);
+          return;
+        }
+
         if (url.protocol !== "yeonapp:") return;
+
+        // Custom scheme 초대: yeonapp://invite?code=CODE
+        if (url.hostname === "invite") {
+          handleInviteUrl(url.searchParams.get("code") ?? "");
+          return;
+        }
+
         if (url.hostname !== "auth") return;
 
         const token = url.searchParams.get("token");

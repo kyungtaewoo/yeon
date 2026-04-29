@@ -1,0 +1,15 @@
+{
+  "applinks": {
+    "details": [
+      {
+        "appIDs": ["K3AZ9KNH5Q.com.woopitel.yeon"],
+        "components": [
+          {
+            "/": "/invite/*",
+            "comment": "친구 초대 코드 환영 페이지"
+          }
+        ]
+      }
+    ]
+  }
+}
