@@ -7,6 +7,10 @@ import { useOnboardingStore } from "@/stores/onboardingStore";
 import { apiClient } from "@/lib/api";
 import { postLoginSync } from "@/lib/auth/postLoginSync";
 import { resolvePostLoginTarget } from "@/lib/auth/postLoginRedirect";
+import {
+  parseDeepLinkUrl,
+  shouldProcessLaunchUrl,
+} from "@/lib/nativeBridge/parseDeepLink";
 
 /**
  * Capacitor 네이티브 브릿지.
@@ -34,38 +38,18 @@ export function NativeBridge() {
 
     let handle: { remove: () => void } | undefined;
 
-    const handleInviteUrl = (code: string) => {
-      if (!code) return;
-      router.replace(`/invite/${encodeURIComponent(code)}`);
-    };
-
     const handleUrl = async (rawUrl: string) => {
       try {
-        const url = new URL(rawUrl);
+        const action = parseDeepLinkUrl(rawUrl);
+        if (!action) return;
 
-        // Universal Link: https://yeonapp.com/invite/CODE
-        if (
-          url.protocol === "https:" &&
-          url.hostname === "yeonapp.com" &&
-          url.pathname.startsWith("/invite/")
-        ) {
-          const code = url.pathname.split("/invite/")[1]?.split("/")[0] ?? "";
-          handleInviteUrl(code);
+        if (action.type === "invite") {
+          router.replace(`/invite/${encodeURIComponent(action.code)}`);
           return;
         }
 
-        if (url.protocol !== "yeonapp:") return;
-
-        // Custom scheme 초대: yeonapp://invite?code=CODE
-        if (url.hostname === "invite") {
-          handleInviteUrl(url.searchParams.get("code") ?? "");
-          return;
-        }
-
-        if (url.hostname !== "auth") return;
-
-        const token = url.searchParams.get("token");
-        if (!token) return;
+        // action.type === "auth"
+        const { token } = action;
 
         const me = await apiClient<{
           id: string;
@@ -133,16 +117,13 @@ export function NativeBridge() {
     (async () => {
       const { App } = await import("@capacitor/app");
 
-      // Cold start: getLaunchUrl 은 앱 종료 전까지 같은 URL 반환 → 한 번만 의미 있음.
-      // - auth URL: 이미 토큰 있으면 OAuth 콜백 재처리 X (이전 로그인 시 처리됨).
-      // - invite URL: 토큰 유무 무관 매번 처리 — 카톡에서 새 초대 링크를 cold-start 로
-      //   여는 게 가장 흔한 케이스. 토큰 있다고 무시하면 invite 가 통째 누락됨.
+      // Cold start: shouldProcessLaunchUrl 가 auth/invite 케이스별 가드 결정.
+      // 자세한 분기 규칙은 parseDeepLink.ts 단위 테스트 참조.
       try {
         const launch = await App.getLaunchUrl();
         if (launch?.url) {
-          const isAuthUrl = launch.url.startsWith("yeonapp://auth");
           const { token: existingToken } = useAuthStore.getState();
-          if (!existingToken || !isAuthUrl) {
+          if (shouldProcessLaunchUrl(launch.url, !!existingToken)) {
             await handleUrl(launch.url);
           }
         }

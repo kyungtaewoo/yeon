@@ -256,18 +256,21 @@ export default function InviteWelcomePage() {
  * 비-iOS 사용자에게 보조 안내. App Store 정식 출시 전이라 다운로드 링크 대신
  * "iOS 우선 출시" 정도만 보여줌. 정식 출시 후 App Store URL 로 교체.
  */
-function PlatformHint() {
-  const [hint, setHint] = useState<"ios" | "android" | "desktop" | null>(null);
+function detectPlatform(): "ios" | "android" | "desktop" | null {
+  if (typeof navigator === "undefined") return null;
+  const ua = navigator.userAgent.toLowerCase();
+  if (/iphone|ipad|ipod/.test(ua)) return "ios";
+  if (/android/.test(ua)) return "android";
+  return "desktop";
+}
 
+function PlatformHint() {
+  // 서버 렌더에는 null 로, 마운트 후에 UA 읽음 — hydration mismatch 회피.
+  // (lint react-hooks/set-state-in-effect 가 이 SSR 패턴을 이해 못 함 — 수동 disable)
+  const [hint, setHint] = useState<"ios" | "android" | "desktop" | null>(null);
   useEffect(() => {
-    if (typeof navigator === "undefined") return;
-    const ua = navigator.userAgent.toLowerCase();
-    const isIOS = /iphone|ipad|ipod/.test(ua);
-    const isAndroid = /android/.test(ua);
-    const isMobile = isIOS || isAndroid;
-    if (isIOS) setHint("ios");
-    else if (isAndroid) setHint("android");
-    else if (!isMobile) setHint("desktop");
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setHint(detectPlatform());
   }, []);
 
   if (!hint) return null;
