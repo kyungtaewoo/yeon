@@ -19,6 +19,7 @@
     "@capacitor/cli": "^6.2.1",
     "@capacitor/core": "^6.2.1",
     "@capacitor/ios": "^6.2.1",
+    "@capacitor/share": "^6.0.4",
     "@tosspayments/tosspayments-sdk": "^2.6.0",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",

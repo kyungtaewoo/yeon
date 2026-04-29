@@ -10,10 +10,12 @@ import { PremiumBanner } from "@/components/premium/PremiumBanner";
 import { usePremium } from "@/hooks/usePremium";
 import { useAuthStore } from "@/stores/authStore";
 import {
+  createInvite,
   listFriends,
   type FriendInviteRow,
   FriendUnauthorizedError,
 } from "@/lib/api/friends";
+import { shareInvite } from "@/lib/share/inviteShare";
 
 function timeSince(dateStr: string): string {
   const diff = Date.now() - new Date(dateStr).getTime();
@@ -64,6 +66,7 @@ export default function FriendsPage() {
   const [invites, setInvites] = useState<FriendInviteRow[] | null>(null);
   const [loading, setLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [inviteSending, setInviteSending] = useState(false);
 
   useEffect(() => {
     if (!token) {
@@ -95,11 +98,39 @@ export default function FriendsPage() {
     };
   }, [token, router]);
 
-  // 카톡 초대 — 실제 share 로직은 Step 4 에서 구현. 우선 안내 토스트만.
-  const handleInvite = () => {
-    toast("준비 중이에요", {
-      description: "다음 빌드에서 카카오톡 초대를 켭니다.",
-    });
+  const handleInvite = async () => {
+    if (!token || inviteSending) return;
+    setInviteSending(true);
+    try {
+      const invite = await createInvite(token);
+      // 새 초대를 목록 맨 앞에 즉시 반영 — listFriends 재호출 안 함.
+      setInvites((prev) => [invite, ...(prev ?? [])]);
+
+      const result = await shareInvite({
+        inviteCode: invite.inviteCode,
+        inviterNickname: me?.nickname ?? "",
+      });
+      if (result === "shared") {
+        toast.success("초대를 보냈어요", {
+          description: "친구가 수락하면 알림으로 알려드릴게요",
+        });
+      } else if (result === "fallback-copied") {
+        toast.success("초대 링크가 복사됐어요", {
+          description: "카카오톡에서 친구에게 붙여넣어 주세요",
+        });
+      }
+      // "cancelled" 는 silent — 사용자가 의도적으로 닫은 것.
+    } catch (e) {
+      if (e instanceof FriendUnauthorizedError) {
+        router.replace("/login");
+        return;
+      }
+      toast.error("초대를 보내지 못했어요", {
+        description: e instanceof Error ? e.message : "잠시 후 다시 시도해주세요",
+      });
+    } finally {
+      setInviteSending(false);
+    }
   };
 
   // 비로그인 — 빈 상태 + 로그인 유도
