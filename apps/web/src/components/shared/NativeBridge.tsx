@@ -6,6 +6,7 @@ import { useAuthStore } from "@/stores/authStore";
 import { useOnboardingStore } from "@/stores/onboardingStore";
 import { apiClient } from "@/lib/api";
 import { postLoginSync } from "@/lib/auth/postLoginSync";
+import { resolvePostLoginTarget } from "@/lib/auth/postLoginRedirect";
 
 /**
  * Capacitor 네이티브 브릿지.
@@ -116,7 +117,13 @@ export function NativeBridge() {
           }
         }
 
-        const target = onboardingComplete ? "/home" : "/saju-input";
+        const defaultTarget = onboardingComplete ? "/home" : "/saju-input";
+        // 비로그인 상태로 /invite/[code] 들어왔다가 로그인하고 돌아오면 그쪽으로 복귀.
+        // 단 onboarding 미완 사용자는 사주 먼저 — invite 페이지가 사주 요구하므로
+        // 정합성 위해 기본 라우팅이 우선.
+        const target = onboardingComplete
+          ? resolvePostLoginTarget(defaultTarget)
+          : defaultTarget;
         router.replace(target);
       } catch (err) {
         console.error("[NativeBridge] handleUrl 실패:", err);
@@ -126,17 +133,21 @@ export function NativeBridge() {
     (async () => {
       const { App } = await import("@capacitor/app");
 
-      // Cold start: 이미 로그인 상태면 launch URL 은 이전에 처리된 것 → skip.
-      const { token: existingToken } = useAuthStore.getState();
-      if (!existingToken) {
-        try {
-          const launch = await App.getLaunchUrl();
-          if (launch?.url) {
+      // Cold start: getLaunchUrl 은 앱 종료 전까지 같은 URL 반환 → 한 번만 의미 있음.
+      // - auth URL: 이미 토큰 있으면 OAuth 콜백 재처리 X (이전 로그인 시 처리됨).
+      // - invite URL: 토큰 유무 무관 매번 처리 — 카톡에서 새 초대 링크를 cold-start 로
+      //   여는 게 가장 흔한 케이스. 토큰 있다고 무시하면 invite 가 통째 누락됨.
+      try {
+        const launch = await App.getLaunchUrl();
+        if (launch?.url) {
+          const isAuthUrl = launch.url.startsWith("yeonapp://auth");
+          const { token: existingToken } = useAuthStore.getState();
+          if (!existingToken || !isAuthUrl) {
             await handleUrl(launch.url);
           }
-        } catch {
-          // getLaunchUrl 이 일부 플랫폼에서 실패할 수 있음 — 무시
         }
+      } catch {
+        // getLaunchUrl 이 일부 플랫폼에서 실패할 수 있음 — 무시
       }
 
       // Warm start: 앱이 이미 떠있는 상태에서 yeonapp:// 가 들어옴

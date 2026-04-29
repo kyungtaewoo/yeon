@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { apiClient } from "@/lib/api";
 import { useAuthStore } from "@/stores/authStore";
 import { postLoginSync } from "@/lib/auth/postLoginSync";
+import { resolvePostLoginTarget } from "@/lib/auth/postLoginRedirect";
 
 function CallbackInner() {
   const router = useRouter();
@@ -48,7 +49,13 @@ function CallbackInner() {
             console.warn("[postLoginSync] failed", e);
           }
 
-          const target = isNew || !user.isOnboardingComplete ? "/saju-input" : "/home";
+          const defaultTarget =
+            isNew || !user.isOnboardingComplete ? "/saju-input" : "/home";
+          // onboarding 끝난 사용자는 pending invite 이 있으면 /invite/[code] 로 복귀.
+          const target =
+            !isNew && user.isOnboardingComplete
+              ? resolvePostLoginTarget(defaultTarget)
+              : defaultTarget;
           console.log("[Callback] routing to", target);
           router.replace(target);
         } catch (error) {
@@ -96,7 +103,7 @@ function CallbackInner() {
         if (data.isNewUser || !data.user.isOnboardingComplete) {
           router.replace("/saju-input");
         } else {
-          router.replace("/home");
+          router.replace(resolvePostLoginTarget("/home"));
         }
       } catch (error) {
         console.error("Auth callback error:", error);
