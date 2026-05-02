@@ -30,8 +30,7 @@ export class FriendsController {
   @UseGuards(JwtAuthGuard)
   @Get()
   async list(@Request() req: any) {
-    const invites = await this.service.listMyInvites(req.user.id);
-    return { invites };
+    return this.service.listMyInvites(req.user.id);
   }
 
   /** GET /friends/:inviteId — 초대 상세 + 저장된 3단계 궁합 */
