@@ -1,4 +1,4 @@
-import { Controller, Post, Get, Body, Param, UseGuards, Request } from '@nestjs/common';
+import { Controller, Post, Get, Body, Param, Query, UseGuards, Request } from '@nestjs/common';
 import type { CompatibilityWeights } from '@yeon/saju-engine';
 import { MatchingService } from './matching.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
@@ -41,10 +41,23 @@ export class MatchingController {
   /**
    * GET /matching/discovery — 호환성 기반 디스커버리.
    * NestJS 라우트 우선순위 — 반드시 GET :id 보다 위에 정의.
+   * Query: ageMin, ageMax (number), tier (general|romantic|deep), minScore (number)
    */
   @Get('discovery')
-  async discovery(@Request() req: any) {
-    return this.service.discoverCandidates(req.user.id);
+  async discovery(
+    @Request() req: any,
+    @Query('ageMin') ageMin?: string,
+    @Query('ageMax') ageMax?: string,
+    @Query('tier') tier?: string,
+    @Query('minScore') minScore?: string,
+  ) {
+    return this.service.discoverCandidates(req.user.id, {
+      ageMin: ageMin != null ? parseInt(ageMin, 10) : undefined,
+      ageMax: ageMax != null ? parseInt(ageMax, 10) : undefined,
+      tier:
+        tier === 'general' || tier === 'romantic' || tier === 'deep' ? tier : undefined,
+      minScore: minScore != null ? parseInt(minScore, 10) : undefined,
+    });
   }
 
   /** POST /matching/express-interest — 디스커버리 카드의 "관심 표시" */

@@ -11,7 +11,14 @@ import {
   getDiscovery,
   expressInterest,
   type DiscoveryCandidate,
+  type DiscoveryTier,
 } from "@/lib/api/matching";
+
+const TIER_LABEL: Record<DiscoveryTier, string> = {
+  general: "일반 (사회)",
+  romantic: "연인",
+  deep: "깊은",
+};
 
 export function Discover() {
   const router = useRouter();
@@ -24,12 +31,19 @@ export function Discover() {
   const [interested, setInterested] = useState<Set<string>>(new Set());
   const [actingId, setActingId] = useState<string | null>(null);
 
+  // 필터 — 적용 시점에 fetch (debounce 대신 명시적 "적용" 버튼)
+  const [tier, setTier] = useState<DiscoveryTier>("romantic");
+  const [ageMin, setAgeMin] = useState<number>(25);
+  const [ageMax, setAgeMax] = useState<number>(45);
+  const [minScore, setMinScore] = useState<number>(50);
+  const [showFilter, setShowFilter] = useState<boolean>(false);
+
   const load = useCallback(async () => {
     if (!token) return;
     setLoading(true);
     setErrorMsg(null);
     try {
-      const res = await getDiscovery(token);
+      const res = await getDiscovery(token, { tier, ageMin, ageMax, minScore });
       setCandidates(res.candidates);
     } catch (e) {
       if (e instanceof ApiError) {
@@ -44,11 +58,13 @@ export function Discover() {
     } finally {
       setLoading(false);
     }
-  }, [token, router]);
+  }, [token, router, tier, ageMin, ageMax, minScore]);
 
+  // 첫 로드만 자동 — 이후엔 사용자가 "적용" 클릭 시 갱신
   useEffect(() => {
     void load();
-  }, [load]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [token]);
 
   const handleInterest = async (candidateId: string) => {
     if (!token || actingId) return;
@@ -92,9 +108,99 @@ export function Discover() {
             당신과 잘 맞는 사람들
           </h1>
           <p className="text-xs text-[var(--muted-foreground)]">
-            사주 호환성 기반으로 추천된 후보예요
+            {TIER_LABEL[tier]} 호환성 점수 {minScore}점 이상 · 만 {ageMin}~{ageMax}세
           </p>
         </header>
+
+        {/* 필터 토글 + 패널 */}
+        <div>
+          <button
+            type="button"
+            onClick={() => setShowFilter((v) => !v)}
+            className="text-xs text-[var(--brand-gold)] underline"
+          >
+            {showFilter ? "필터 닫기" : "맞춤 설정"}
+          </button>
+          {showFilter && (
+            <Card className="mt-2 border-none shadow-sm">
+              <CardContent className="py-4 space-y-4">
+                {/* tier 선택 */}
+                <div>
+                  <p className="text-xs text-[var(--muted-foreground)] mb-2">호환성 종류</p>
+                  <div className="flex gap-2">
+                    {(["general", "romantic", "deep"] as DiscoveryTier[]).map((t) => (
+                      <button
+                        key={t}
+                        type="button"
+                        onClick={() => setTier(t)}
+                        className={`flex-1 rounded border px-2 py-1.5 text-xs ${
+                          tier === t
+                            ? "border-[var(--brand-gold)] bg-[var(--brand-gold)]/10 text-[var(--foreground)] font-medium"
+                            : "border-[var(--muted-foreground)]/20 text-[var(--muted-foreground)]"
+                        }`}
+                      >
+                        {TIER_LABEL[t]}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* 나이 범위 */}
+                <div>
+                  <p className="text-xs text-[var(--muted-foreground)] mb-2">
+                    나이 <span className="text-[var(--foreground)] font-medium">만 {ageMin}~{ageMax}세</span>
+                  </p>
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="number"
+                      min={20}
+                      max={ageMax}
+                      value={ageMin}
+                      onChange={(e) => setAgeMin(Number(e.target.value))}
+                      className="w-16 rounded border border-[var(--muted-foreground)]/20 px-2 py-1 text-xs"
+                    />
+                    <span className="text-xs text-[var(--muted-foreground)]">~</span>
+                    <input
+                      type="number"
+                      min={ageMin}
+                      max={80}
+                      value={ageMax}
+                      onChange={(e) => setAgeMax(Number(e.target.value))}
+                      className="w-16 rounded border border-[var(--muted-foreground)]/20 px-2 py-1 text-xs"
+                    />
+                  </div>
+                </div>
+
+                {/* 최소 점수 */}
+                <div>
+                  <p className="text-xs text-[var(--muted-foreground)] mb-2">
+                    최소 호환성 점수 <span className="text-[var(--foreground)] font-medium">{minScore}점</span>
+                  </p>
+                  <input
+                    type="range"
+                    min={50}
+                    max={95}
+                    step={5}
+                    value={minScore}
+                    onChange={(e) => setMinScore(Number(e.target.value))}
+                    className="w-full"
+                  />
+                </div>
+
+                <Button
+                  type="button"
+                  onClick={() => {
+                    void load();
+                    setShowFilter(false);
+                  }}
+                  className="w-full bg-[var(--brand-red)] text-white"
+                >
+                  적용
+                </Button>
+              </CardContent>
+            </Card>
+          )}
+        </div>
 
         {loading ? (
           <p className="mt-12 text-center text-sm text-[var(--muted-foreground)]">

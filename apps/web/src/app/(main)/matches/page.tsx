@@ -149,89 +149,103 @@ export default function MatchesPage() {
 
   return (
     <div className="px-4 py-6">
-      <div className="mx-auto max-w-md space-y-5">
-        <div className="flex items-center justify-between">
-          <h1 className="font-[family-name:var(--font-serif)] text-2xl text-[var(--foreground)]">
-            매칭
-          </h1>
-          <Button
-            type="button"
-            onClick={handleNewMatch}
-            disabled={limitReached}
-            className="bg-[var(--brand-red)] hover:bg-[var(--brand-red)]/90 text-white text-sm px-4 py-2 disabled:opacity-50"
-          >
-            매칭 대상 추가하기
-          </Button>
-        </div>
+      <div className="mx-auto max-w-md space-y-6">
+        <h1 className="font-[family-name:var(--font-serif)] text-2xl text-[var(--foreground)]">
+          매칭
+        </h1>
 
-        {/* 디스커버리 진입 카드 — 호환성 기반 추천 후보 */}
-        {token && (
-          <Card
-            className="border-none shadow-sm cursor-pointer overflow-hidden bg-[var(--brand-gold)]/5 hover:shadow-md transition-shadow"
-            onClick={() => router.push("/discover")}
-          >
-            <CardContent className="py-4 flex items-center justify-between">
-              <div>
-                <p className="text-sm font-medium text-[var(--foreground)]">
-                  ✨ 탐색하기
+        {/* ─── 섹션 1: ✨ 탐색하기 ─── */}
+        <section className="space-y-2">
+          <div>
+            <h2 className="text-sm font-medium text-[var(--foreground)]">✨ 탐색하기</h2>
+            <p className="text-xs text-[var(--muted-foreground)] mt-0.5">
+              지금 가입한 사람 중 나와 잘 맞는 후보를 호환성 점수순으로 추천받아요
+            </p>
+          </div>
+          {token ? (
+            <Card
+              className="border-none shadow-sm cursor-pointer overflow-hidden bg-[var(--brand-gold)]/5 hover:shadow-md transition-shadow"
+              onClick={() => router.push("/discover")}
+            >
+              <CardContent className="py-4 flex items-center justify-between">
+                <p className="text-sm text-[var(--foreground)]">
+                  당신과 잘 맞는 사람들 보기
                 </p>
-                <p className="text-xs text-[var(--muted-foreground)] mt-0.5">
-                  당신과 잘 맞는 사람을 호환성 점수로 찾아드려요
-                </p>
+                <span className="text-[var(--brand-gold)]">→</span>
+              </CardContent>
+            </Card>
+          ) : (
+            <Card className="border-dashed border border-[var(--muted-foreground)]/20 bg-transparent">
+              <CardContent className="py-3 text-center text-xs text-[var(--muted-foreground)]">
+                로그인 후 이용할 수 있어요
+              </CardContent>
+            </Card>
+          )}
+        </section>
+
+        {/* ─── 섹션 2: 🎯 정밀 매칭 ─── */}
+        <section className="space-y-2">
+          <div className="flex items-center justify-between">
+            <div>
+              <h2 className="text-sm font-medium text-[var(--foreground)]">🎯 정밀 매칭</h2>
+              <p className="text-xs text-[var(--muted-foreground)] mt-0.5">
+                특정 사주의 인연을 미리 등록해 가입 알림을 받아요
+              </p>
+            </div>
+            <Button
+              type="button"
+              onClick={handleNewMatch}
+              disabled={limitReached}
+              className="bg-[var(--brand-red)] hover:bg-[var(--brand-red)]/90 text-white text-xs px-3 py-1.5 disabled:opacity-50"
+            >
+              + 추가
+            </Button>
+          </div>
+
+          {/* 동기화 실패 배너 */}
+          {token && syncStatus === 'error' && matches.length > 0 && (
+            <div className="text-xs text-[var(--muted-foreground)] bg-[var(--muted)]/40 rounded-md px-3 py-2">
+              최신 데이터를 불러오지 못했어요. 새로고침 시 재시도됩니다.
+            </div>
+          )}
+
+          {/* 한도 표시 */}
+          <Card className="border-none shadow-sm bg-[var(--brand-gold)]/5">
+            <CardContent className="py-3">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-xs text-[var(--muted-foreground)]">
+                    등록 한도{" "}
+                    <span className="font-bold text-[var(--brand-gold)]">
+                      {matches.length} / {limit}
+                    </span>
+                  </p>
+                  <p className="text-[10px] text-[var(--muted-foreground)] mt-0.5">
+                    {isPremium ? "프리미엄 회원" : "일반 회원 — 프리미엄 시 최대 10개까지"}
+                  </p>
+                </div>
+                {!isPremium && (
+                  <button
+                    type="button"
+                    onClick={() => router.push("/premium")}
+                    className="text-xs text-[var(--brand-gold)] underline"
+                  >
+                    업그레이드
+                  </button>
+                )}
               </div>
-              <span className="text-[var(--brand-gold)]">→</span>
             </CardContent>
           </Card>
-        )}
 
-        {/* 동기화 실패 배너 — persist 캐시로 폴백된 상태 안내 */}
-        {token && syncStatus === 'error' && matches.length > 0 && (
-          <div className="text-xs text-[var(--muted-foreground)] bg-[var(--muted)]/40 rounded-md px-3 py-2">
-            최신 데이터를 불러오지 못했어요. 새로고침 시 재시도됩니다.
-          </div>
-        )}
-
-        {/* 한도 표시 + 프리미엄 안내 */}
-        <Card className="border-none shadow-sm bg-[var(--brand-gold)]/5">
-          <CardContent className="py-3">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-xs text-[var(--muted-foreground)]">
-                  매칭 대상 등록 한도{" "}
-                  <span className="font-bold text-[var(--brand-gold)]">
-                    {matches.length} / {limit}
-                  </span>
-                </p>
-                <p className="text-[10px] text-[var(--muted-foreground)] mt-0.5">
-                  {isPremium ? "프리미엄 회원" : "일반 회원 — 프리미엄 시 최대 10개까지"}
-                </p>
-              </div>
-              {!isPremium && (
-                <button
-                  type="button"
-                  onClick={() => router.push("/premium")}
-                  className="text-xs text-[var(--brand-gold)] underline"
-                >
-                  업그레이드
-                </button>
-              )}
-            </div>
-          </CardContent>
-        </Card>
-
-        <div>
-          <p className="text-sm text-[var(--muted-foreground)] mb-3">
-            탐색 중인 매칭 대상 ({matches.length})
-          </p>
-
+          {/* 카드 리스트 */}
           {matches.length === 0 ? (
             <Card className="border-none shadow-sm">
-              <CardContent className="py-10 text-center space-y-2">
-                <p className="text-[var(--muted-foreground)]">
+              <CardContent className="py-8 text-center space-y-2">
+                <p className="text-sm text-[var(--muted-foreground)]">
                   아직 등록된 매칭 대상이 없어요
                 </p>
                 <p className="text-xs text-[var(--muted-foreground)]">
-                  '매칭 대상 추가하기' 를 눌러 이상적인 상대 사주를 찾아보세요
+                  '추가' 를 눌러 이상적인 상대 사주를 찾아보세요
                 </p>
               </CardContent>
             </Card>
@@ -242,7 +256,7 @@ export default function MatchesPage() {
               ))}
             </div>
           )}
-        </div>
+        </section>
 
         {/* 비로그인 CTA — 다른 기기 동기화 안내 */}
         {!token && matches.length > 0 && (

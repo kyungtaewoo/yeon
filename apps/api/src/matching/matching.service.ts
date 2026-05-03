@@ -8,6 +8,7 @@ import {
   findIdealMatchesV2,
   calculateGeneralCompatibility,
   calculateRomanticCompatibility,
+  calculateDeepCompatibility,
   type CompatibilityWeights,
   type FourPillars,
   type HeavenlyStem,
@@ -326,20 +327,39 @@ export class MatchingService {
 
   /**
    * 호환성 기반 디스커버리.
-   * - 본인 제외
-   * - 반대 성별
-   * - 사주 입력 완료자 (isOnboardingComplete=true)
-   * - 나이 = 본인 preferredAgeMin/Max 범위
+   * - 본인 제외, 반대 성별, 사주 입력 완료자
+   * - 옵션 필터: ageMin/Max, tier(general|romantic|deep), minScore
+   *   default — me.preferredAgeMin/Max, 'romantic', 50
    * - 이미 matches row 가 있는 상대 전부 제외 (rejected 영구 차단 포함)
-   * - 일반 호환성 70점 이상, 점수 desc, 상위 20명
+   * - 점수 desc, 상위 20명
    */
-  async discoverCandidates(userId: string) {
+  async discoverCandidates(
+    userId: string,
+    opts?: {
+      ageMin?: number;
+      ageMax?: number;
+      tier?: 'general' | 'romantic' | 'deep';
+      minScore?: number;
+    },
+  ) {
     const me = await this.userRepo.findOne({ where: { id: userId } });
     if (!me) throw new NotFoundException('사용자를 찾을 수 없습니다');
     const mySaju = await this.sajuRepo.findOne({ where: { userId } });
     if (!mySaju) {
       throw new BadRequestException('사주 정보를 먼저 입력해주세요');
     }
+
+    const tier = opts?.tier ?? 'romantic';
+    const minScore = opts?.minScore ?? 50;
+    const ageMin = opts?.ageMin ?? me.preferredAgeMin;
+    const ageMax = opts?.ageMax ?? me.preferredAgeMax;
+
+    const calc =
+      tier === 'general'
+        ? calculateGeneralCompatibility
+        : tier === 'deep'
+          ? calculateDeepCompatibility
+          : calculateRomanticCompatibility;
 
     const oppositeGender = me.gender === 'male' ? 'female' : 'male';
     const myPillars = profileToPillars(mySaju);
@@ -362,10 +382,12 @@ export class MatchingService {
       if (excludeIds.has(u.id)) return false;
       if (!u.birthDate) return false;
       const age = calculateAge(u.birthDate);
-      return age >= me.preferredAgeMin && age <= me.preferredAgeMax;
+      return age >= ageMin && age <= ageMax;
     });
 
-    if (ageFiltered.length === 0) return { candidates: [], total: 0 };
+    if (ageFiltered.length === 0) {
+      return { candidates: [], total: 0, tier, minScore };
+    }
 
     // 사주 일괄 fetch (N+1 방지)
     const sajus = await this.sajuRepo.find({
@@ -378,12 +400,17 @@ export class MatchingService {
         const saju = sajuByUserId.get(u.id);
         if (!saju) return null;
         const theirPillars = profileToPillars(saju);
-        // 디스커버리 = 연애 매칭 의도 → romantic 점수. (general 은 친구 탭)
-        const compat = calculateRomanticCompatibility(myPillars, theirPillars);
+        const compat = calc(myPillars, theirPillars);
         const age = calculateAge(u.birthDate!);
         const flavor = scoreFlavor(compat.totalScore);
-        const summary = (compat.summary ?? compat.narrative ?? '').toString();
-        // 첫 문장 — "...입니다." 까지. 마침표가 없으면 전체.
+        // deep 의 narrative 는 객체 — summary 우선, 없으면 narrative.summary, 그것도 없으면 ''.
+        const rawSummary =
+          (compat as any).summary ??
+          ((compat as any).narrative && typeof (compat as any).narrative === 'object'
+            ? (compat as any).narrative.summary
+            : (compat as any).narrative) ??
+          '';
+        const summary = String(rawSummary);
         const firstSentenceMatch = summary.match(/^[^.!?]+[.!?]/);
         const summaryOneLiner = firstSentenceMatch ? firstSentenceMatch[0].trim() : summary;
         return {
@@ -398,12 +425,11 @@ export class MatchingService {
           summaryOneLiner,
         };
       })
-      // MVP 임계값 50 — starry 풀에서 70+ 가 드물어 풍부한 표본 위해 일시 낮춤. 풀 100명 도달 시 70 복귀.
-      .filter((c): c is NonNullable<typeof c> => c !== null && c.score >= 50);
+      .filter((c): c is NonNullable<typeof c> => c !== null && c.score >= minScore);
 
     scored.sort((a, b) => b.score - a.score);
     const limited = scored.slice(0, 20);
-    return { candidates: limited, total: limited.length };
+    return { candidates: limited, total: limited.length, tier, minScore };
   }
 
   /**

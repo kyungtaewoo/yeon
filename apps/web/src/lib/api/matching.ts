@@ -113,14 +113,34 @@ export interface DiscoveryCandidate {
   summaryOneLiner: string;
 }
 
+export type DiscoveryTier = 'general' | 'romantic' | 'deep';
+
+export interface DiscoveryFilters {
+  ageMin?: number;
+  ageMax?: number;
+  tier?: DiscoveryTier;
+  minScore?: number;
+}
+
 export interface DiscoveryResponse {
   candidates: DiscoveryCandidate[];
   total: number;
+  tier: DiscoveryTier;
+  minScore: number;
 }
 
-/** GET /matching/discovery */
-export async function getDiscovery(token: string): Promise<DiscoveryResponse> {
-  return apiClient<DiscoveryResponse>('/matching/discovery', { token });
+/** GET /matching/discovery — 옵션 필터 query string. */
+export async function getDiscovery(
+  token: string,
+  filters?: DiscoveryFilters,
+): Promise<DiscoveryResponse> {
+  const qs = new URLSearchParams();
+  if (filters?.ageMin != null) qs.set('ageMin', String(filters.ageMin));
+  if (filters?.ageMax != null) qs.set('ageMax', String(filters.ageMax));
+  if (filters?.tier) qs.set('tier', filters.tier);
+  if (filters?.minScore != null) qs.set('minScore', String(filters.minScore));
+  const path = qs.toString() ? `/matching/discovery?${qs.toString()}` : '/matching/discovery';
+  return apiClient<DiscoveryResponse>(path, { token });
 }
 
 /** POST /matching/express-interest */
