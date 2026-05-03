@@ -7,6 +7,7 @@ import { Repository, In } from 'typeorm';
 import {
   findIdealMatchesV2,
   calculateGeneralCompatibility,
+  calculateRomanticCompatibility,
   type CompatibilityWeights,
   type FourPillars,
   type HeavenlyStem,
@@ -377,7 +378,8 @@ export class MatchingService {
         const saju = sajuByUserId.get(u.id);
         if (!saju) return null;
         const theirPillars = profileToPillars(saju);
-        const compat = calculateGeneralCompatibility(myPillars, theirPillars);
+        // 디스커버리 = 연애 매칭 의도 → romantic 점수. (general 은 친구 탭)
+        const compat = calculateRomanticCompatibility(myPillars, theirPillars);
         const age = calculateAge(u.birthDate!);
         const flavor = scoreFlavor(compat.totalScore);
         const summary = (compat.summary ?? compat.narrative ?? '').toString();
