@@ -4,13 +4,28 @@ import {
 } from 'typeorm';
 import { SajuProfile } from '../../saju/entities/saju-profile.entity';
 
+/** OAuth provider — Kakao 또는 Apple. 향후 Google 등 추가 가능. */
+export type AuthProvider = 'kakao' | 'apple';
+
 @Entity('users')
 export class User {
   @PrimaryGeneratedColumn('uuid')
   id: string;
 
-  @Column({ unique: true })
-  kakaoId: string;
+  @Column({ type: 'varchar', default: 'kakao' })
+  provider: AuthProvider;
+
+  /** 카카오 회원가입 시 채워짐. Apple 가입자는 null. */
+  @Column({ unique: true, nullable: true, type: 'varchar' })
+  kakaoId: string | null;
+
+  /** Apple 회원가입 시 채워지는 sub. Kakao 가입자는 null. */
+  @Column({ unique: true, nullable: true, type: 'varchar' })
+  appleId: string | null;
+
+  /** Apple 가입자 이메일 (private email 가능). 카카오는 별도. */
+  @Column({ nullable: true, type: 'varchar' })
+  email: string | null;
 
   @Column()
   nickname: string;

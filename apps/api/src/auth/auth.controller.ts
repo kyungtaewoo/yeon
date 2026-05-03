@@ -2,6 +2,7 @@ import { Controller, Post, Get, Delete, Body, Query, Res, UseGuards, Request } f
 import type { Response } from 'express';
 import { ConfigService } from '@nestjs/config';
 import { AuthService, KakaoCodeAlreadyUsedError } from './auth.service';
+import { AppleAuthService } from './apple.service';
 import { UsersService } from '../users/users.service';
 import { JwtAuthGuard } from './guards/jwt-auth.guard';
 
@@ -9,9 +10,33 @@ import { JwtAuthGuard } from './guards/jwt-auth.guard';
 export class AuthController {
   constructor(
     private readonly authService: AuthService,
+    private readonly appleAuthService: AppleAuthService,
     private readonly usersService: UsersService,
     private readonly config: ConfigService,
   ) {}
+
+  /**
+   * POST /auth/apple — iOS 네이티브 Apple Sign In 결과 검증.
+   * Body: { identityToken, givenName?, familyName?, email? }
+   *   identityToken — Apple 인증 다이얼로그가 반환한 JWT (필수)
+   *   givenName/familyName — 첫 로그인에만 제공됨, 닉네임 fallback 용
+   *   email — 옵션 (서버는 identityToken 의 email 우선 사용)
+   */
+  @Post('apple')
+  async appleLogin(
+    @Body()
+    body: {
+      identityToken: string;
+      givenName?: string;
+      familyName?: string;
+      email?: string;
+    },
+  ) {
+    return this.appleAuthService.appleLogin(body?.identityToken, {
+      givenName: body?.givenName,
+      familyName: body?.familyName,
+    });
+  }
 
   /** POST /auth/kakao — 프론트에서 code를 보내는 방식 */
   @Post('kakao')

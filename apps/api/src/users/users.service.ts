@@ -15,15 +15,41 @@ export class UsersService {
     return this.userRepo.findOne({ where: { kakaoId } });
   }
 
+  async findByAppleId(appleId: string): Promise<User | null> {
+    return this.userRepo.findOne({ where: { appleId } });
+  }
+
   async findById(id: string): Promise<User | null> {
     return this.userRepo.findOne({ where: { id }, relations: ['sajuProfile'] });
   }
 
   async createFromKakao(kakaoId: string, nickname: string, gender?: string): Promise<User> {
     const user = this.userRepo.create({
+      provider: 'kakao',
       kakaoId,
       nickname,
       gender: (gender as 'male' | 'female') || 'male',
+    });
+    return this.userRepo.save(user);
+  }
+
+  /**
+   * Apple Sign In 신규 사용자 생성.
+   * 성별/생년월일은 Apple 이 제공하지 않음 → 가입 후 사주 입력 단계에서 채움.
+   * 닉네임도 Apple 첫 로그인에서만 제공되므로 클라이언트가 보내준 값을 그대로 저장.
+   */
+  async createAppleUser(input: {
+    appleId: string;
+    email: string | null;
+    nickname: string;
+  }): Promise<User> {
+    const user = this.userRepo.create({
+      provider: 'apple',
+      appleId: input.appleId,
+      email: input.email,
+      nickname: input.nickname,
+      // gender 는 사주 입력 단계에서 업데이트. 일단 기본값.
+      gender: 'male',
     });
     return this.userRepo.save(user);
   }
