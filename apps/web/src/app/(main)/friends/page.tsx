@@ -164,11 +164,9 @@ export default function FriendsPage() {
   const list = invites ?? [];
 
   // 섹션 분리:
-  //  - sentPending: 내가 보낸 초대 중 아직 수락 안 된 것 (status=pending). 친구 아님.
   //  - friends: 양쪽이 연결된 invite (joined/saju_complete/calculated). "내 친구" 카운트 기준.
   //  - expired: 만료. 시각적으로 흐릿하게 별도 섹션.
-  // pending 은 inviteeId 가 비어있으니 항상 내가 inviter — 별도 role 검사 불필요.
-  const sentPending = list.filter((x) => x.status === "pending");
+  // pending (수락 대기) 은 별도 섹션으로 노출하지 않음 — UI 노이즈만 됨.
   const friends = list.filter(
     (x) =>
       x.status === "joined" ||
@@ -186,8 +184,7 @@ export default function FriendsPage() {
       )[0]
     : null;
 
-  const isEmpty =
-    sentPending.length === 0 && friends.length === 0 && expired.length === 0;
+  const isEmpty = friends.length === 0 && expired.length === 0;
 
   return (
     <div className="min-h-screen bg-[var(--background)] px-4 py-6">
@@ -344,30 +341,6 @@ export default function FriendsPage() {
                     </Card>
                   );
                 })}
-            </div>
-          </div>
-        )}
-
-        {/* 보낸 초대 (수락 대기) — 내 친구 다음, 만료 위 */}
-        {!loading && !errorMessage && sentPending.length > 0 && (
-          <div>
-            <p className="text-sm font-medium text-[var(--muted-foreground)] mb-3">
-              보낸 초대 ({sentPending.length}개)
-              <span className="ml-1 text-xs">· 수락 대기</span>
-            </p>
-            <div className="space-y-3">
-              {sentPending.map((invite) => (
-                <Card key={invite.id} className="border-none shadow-sm bg-[var(--muted)]/40">
-                  <CardContent className="py-3">
-                    <span className="font-medium text-[var(--muted-foreground)]">
-                      친구가 아직 수락하지 않았어요
-                    </span>
-                    <p className="text-xs text-[var(--muted-foreground)]">
-                      초대 {timeSince(invite.createdAt)}
-                    </p>
-                  </CardContent>
-                </Card>
-              ))}
             </div>
           </div>
         )}
