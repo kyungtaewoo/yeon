@@ -16,6 +16,7 @@ import {
   FriendUnauthorizedError,
 } from "@/lib/api/friends";
 import { shareInvite } from "@/lib/share/inviteShare";
+import { FriendsMatrix } from "./FriendsMatrix";
 
 function timeSince(dateStr: string): string {
   const diff = Date.now() - new Date(dateStr).getTime();
@@ -268,84 +269,105 @@ export default function FriendsPage() {
           </div>
         )}
 
-        {/* 내 친구 — 수락된 invite 만 (joined / saju_complete / calculated) */}
+        {/* 내 친구 — 수락된 invite 만 (joined / saju_complete / calculated)
+            계산 완료 ≥3 명: 매트릭스 / <3: 카드 (Q4=B 결정)
+            joined / saju_complete: 항상 카드 (계산 대기 안내) */}
         {!loading && !errorMessage && friends.length > 0 && me && (
           <div>
             <p className="text-sm font-medium text-[var(--muted-foreground)] mb-3">
               내 친구 ({friends.length}명)
             </p>
 
-            <div className="space-y-3">
-              {friends.map((invite) => {
-                const name = counterpartName(invite, me.id);
-                const compat = invite.compatibility ?? null;
+            {/* 매트릭스 — calculated 3명+ 만 노출 */}
+            {calculated.length >= 3 && (
+              <div className="mb-4">
+                <FriendsMatrix
+                  friends={calculated}
+                  myUserId={me.id}
+                  myGender={me.gender as 'male' | 'female'}
+                  isPremium={isPremium}
+                />
+                <p className="mt-2 text-[10px] text-[var(--muted-foreground)] text-center">
+                  * 일반 궁합 점수 기준 정렬 · 메달 = 1·2·3위
+                </p>
+              </div>
+            )}
 
-                if (invite.status === "calculated" && compat) {
-                  // 동성 친구는 연인/깊은 궁합 의미 X — 일반 궁합만 표시.
-                  // 이성 친구는 3종 모두 표시 (연인/깊은은 비프리미엄이면 잠금).
-                  const counterGender = counterpartGender(invite, me.id);
-                  const sameSex =
-                    counterGender !== null && counterGender === me.gender;
+            {/* 카드 — calculated <3 인 경우 OR 사주 미완 친구 (joined/saju_complete) */}
+            <div className="space-y-3">
+              {friends
+                .filter((invite) => {
+                  // calculated 가 3명 이상이면 매트릭스에 표시되니 카드 영역에서 제외
+                  if (calculated.length >= 3 && invite.status === "calculated") return false;
+                  return true;
+                })
+                .map((invite) => {
+                  const name = counterpartName(invite, me.id);
+                  const compat = invite.compatibility ?? null;
+
+                  if (invite.status === "calculated" && compat) {
+                    const counterGender = counterpartGender(invite, me.id);
+                    const sameSex =
+                      counterGender !== null && counterGender === me.gender;
+                    return (
+                      <Card key={invite.id} className="border-none shadow-sm">
+                        <CardContent className="py-3">
+                          <Link
+                            href={`/friend-detail?id=${encodeURIComponent(invite.id)}`}
+                            className="block"
+                          >
+                            <div className="flex items-center justify-between mb-2">
+                              <span className="font-medium text-[var(--foreground)]">
+                                {name}
+                              </span>
+                              <span className="text-xs text-[var(--muted-foreground)]">
+                                상세보기 &rarr;
+                              </span>
+                            </div>
+                            <div className="space-y-1">
+                              <ScoreLabel
+                                label="일반 궁합"
+                                score={compat.generalScore}
+                                locked={false}
+                              />
+                              {!sameSex && (
+                                <>
+                                  <br />
+                                  <ScoreLabel
+                                    label="연인 궁합"
+                                    score={compat.romanticScore}
+                                    locked={!isPremium}
+                                  />
+                                  <br />
+                                  <ScoreLabel
+                                    label="깊은 궁합"
+                                    score={compat.deepScore}
+                                    locked={!isPremium}
+                                  />
+                                </>
+                              )}
+                            </div>
+                          </Link>
+                        </CardContent>
+                      </Card>
+                    );
+                  }
+
+                  const subText =
+                    invite.status === "joined"
+                      ? "친구가 사주 입력 중이에요"
+                      : "양쪽 사주 완비 — 잠시 후 계산돼요";
                   return (
                     <Card key={invite.id} className="border-none shadow-sm">
                       <CardContent className="py-3">
-                        <Link
-                          href={`/friend-detail?id=${encodeURIComponent(invite.id)}`}
-                          className="block"
-                        >
-                          <div className="flex items-center justify-between mb-2">
-                            <span className="font-medium text-[var(--foreground)]">
-                              {name}
-                            </span>
-                            <span className="text-xs text-[var(--muted-foreground)]">
-                              상세보기 &rarr;
-                            </span>
-                          </div>
-                          <div className="space-y-1">
-                            <ScoreLabel
-                              label="일반 궁합"
-                              score={compat.generalScore}
-                              locked={false}
-                            />
-                            {!sameSex && (
-                              <>
-                                <br />
-                                <ScoreLabel
-                                  label="연인 궁합"
-                                  score={compat.romanticScore}
-                                  locked={!isPremium}
-                                />
-                                <br />
-                                <ScoreLabel
-                                  label="깊은 궁합"
-                                  score={compat.deepScore}
-                                  locked={!isPremium}
-                                />
-                              </>
-                            )}
-                          </div>
-                        </Link>
+                        <span className="font-medium text-[var(--foreground)]">
+                          {name}
+                        </span>
+                        <p className="text-xs text-[var(--muted-foreground)]">{subText}</p>
                       </CardContent>
                     </Card>
                   );
-                }
-
-                // joined / saju_complete — 사주 완비 대기
-                const subText =
-                  invite.status === "joined"
-                    ? "친구가 사주 입력 중이에요"
-                    : "양쪽 사주 완비 — 잠시 후 계산돼요";
-                return (
-                  <Card key={invite.id} className="border-none shadow-sm">
-                    <CardContent className="py-3">
-                      <span className="font-medium text-[var(--foreground)]">
-                        {name}
-                      </span>
-                      <p className="text-xs text-[var(--muted-foreground)]">{subText}</p>
-                    </CardContent>
-                  </Card>
-                );
-              })}
+                })}
             </div>
           </div>
         )}
