@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
-import { useRouter, useParams } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -52,6 +52,15 @@ function counterpartName(
   const inv = detail.invite;
   if (inv.inviterId === myUserId) return inv.invitee?.nickname ?? "이름 미상";
   return inv.inviter?.nickname ?? "이름 미상";
+}
+
+function counterpartGender(
+  detail: FriendDetailResponse,
+  myUserId: string,
+): 'male' | 'female' | null {
+  const inv = detail.invite;
+  if (inv.inviterId === myUserId) return inv.invitee?.gender ?? null;
+  return inv.inviter?.gender ?? null;
 }
 
 /**
@@ -167,10 +176,13 @@ type TierKey = "general" | "romantic" | "deep";
 
 const RECOMPUTE_COOLDOWN_MS = 60_000;
 
-export default function FriendDetailPage() {
+export function FriendDetail() {
   const router = useRouter();
-  const params = useParams<{ inviteId: string }>();
-  const inviteId = params?.inviteId;
+  const search = useSearchParams();
+  // /friend-detail?id=INVITE_ID 형태로만 진입. Capacitor + Vercel 모두 동일 패턴 →
+  // dynamic route placeholder 가 더 이상 불필요 (이전 /friends/[inviteId] 구조에서
+  // Capacitor static export 와 충돌하던 것을 단일 query string 으로 통일).
+  const inviteId = search.get("id") ?? "";
 
   const { isPremium } = usePremium();
   const token = useAuthStore((s) => s.token);
@@ -356,6 +368,11 @@ export default function FriendDetailPage() {
     deep: { score: compat.deepScore, locked: !isPremium },
   };
 
+  // 동성 친구는 연인/깊은 궁합 의미 X (이성 관계 분석) → 카드 숨기고 일반만 강조.
+  const counterGender = counterpartGender(detail, me.id);
+  const sameSex = counterGender !== null && counterGender === me.gender;
+  const effectiveTier: TierKey = sameSex ? "general" : activeTier;
+
   return (
     <div className="min-h-screen bg-[var(--background)] px-4 py-6">
       <div className="mx-auto max-w-md space-y-5">
@@ -376,40 +393,59 @@ export default function FriendDetailPage() {
           </p>
         </header>
 
-        {/* 3종 점수 카드 */}
-        <div className="flex gap-2">
-          <ScoreCard
-            tier="general"
-            label="일반"
-            score={tierData.general.score}
-            locked={tierData.general.locked}
-            onClick={() => setActiveTier("general")}
-            active={activeTier === "general"}
-            fading={recomputing}
-          />
-          <ScoreCard
-            tier="romantic"
-            label="연인"
-            score={tierData.romantic.score}
-            locked={tierData.romantic.locked}
-            onClick={() => setActiveTier("romantic")}
-            active={activeTier === "romantic"}
-            fading={recomputing}
-          />
-          <ScoreCard
-            tier="deep"
-            label="깊은"
-            score={tierData.deep.score}
-            locked={tierData.deep.locked}
-            onClick={() => setActiveTier("deep")}
-            active={activeTier === "deep"}
-            fading={recomputing}
-          />
-        </div>
+        {/* 점수 카드 — 이성 3종 / 동성 1종 (일반만) */}
+        {sameSex ? (
+          <>
+            <div className="flex gap-2">
+              <ScoreCard
+                tier="general"
+                label="일반"
+                score={tierData.general.score}
+                locked={false}
+                onClick={() => setActiveTier("general")}
+                active
+                fading={recomputing}
+              />
+            </div>
+            <p className="text-center text-xs text-[var(--muted-foreground)]">
+              동성 친구는 일반 궁합만 분석해요
+            </p>
+          </>
+        ) : (
+          <div className="flex gap-2">
+            <ScoreCard
+              tier="general"
+              label="일반"
+              score={tierData.general.score}
+              locked={tierData.general.locked}
+              onClick={() => setActiveTier("general")}
+              active={activeTier === "general"}
+              fading={recomputing}
+            />
+            <ScoreCard
+              tier="romantic"
+              label="연인"
+              score={tierData.romantic.score}
+              locked={tierData.romantic.locked}
+              onClick={() => setActiveTier("romantic")}
+              active={activeTier === "romantic"}
+              fading={recomputing}
+            />
+            <ScoreCard
+              tier="deep"
+              label="깊은"
+              score={tierData.deep.score}
+              locked={tierData.deep.locked}
+              onClick={() => setActiveTier("deep")}
+              active={activeTier === "deep"}
+              fading={recomputing}
+            />
+          </div>
+        )}
 
-        {/* 활성 tier 디테일 */}
+        {/* 활성 tier 디테일 — 동성이면 항상 general */}
         <ActiveTierDetail
-          tier={activeTier}
+          tier={effectiveTier}
           compat={compat}
           isPremium={isPremium}
         />

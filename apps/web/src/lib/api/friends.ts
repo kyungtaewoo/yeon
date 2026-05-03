@@ -25,6 +25,9 @@ export type FriendInviteStatus =
 export interface FriendUserBrief {
   id: string;
   nickname: string;
+  /** 동성/이성 분기용 — 백엔드 listMyInvites/getDetail 가 inviter/invitee 관계로
+   *  full User entity 를 보내므로 항상 채워짐. 동성 친구는 일반 궁합만 표시. */
+  gender: 'male' | 'female';
 }
 
 export interface FriendInviteRow {

@@ -63,5 +63,8 @@ export function resolvePostLoginTarget(defaultTarget: string): string {
   } catch {
     // ignore
   }
-  return `/invite/${encodeURIComponent(pending)}`;
+  // Capacitor 정적 export 호환을 위해 placeholder path + query string. Vercel 측은
+  // /invite/[code] path 가 SSR 로 동작하므로 placeholder 경로로 보내도 client-side
+  // 라우팅으로 동일하게 처리됨.
+  return `/invite/__placeholder__?code=${encodeURIComponent(pending)}`;
 }

@@ -44,7 +44,9 @@ export function NativeBridge() {
         if (!action) return;
 
         if (action.type === "invite") {
-          router.replace(`/invite/${encodeURIComponent(action.code)}`);
+          // Capacitor 정적 export 는 dynamic route 의 placeholder path 만 빌드되므로
+          // ?code= query string 으로 전달. Vercel 측은 /invite/[code] path 그대로 동작.
+          router.replace(`/invite/__placeholder__?code=${encodeURIComponent(action.code)}`);
           return;
         }
 

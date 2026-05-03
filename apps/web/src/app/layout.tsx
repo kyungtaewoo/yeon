@@ -3,6 +3,7 @@ import "./globals.css";
 import { ServiceWorkerRegister } from "@/components/shared/ServiceWorkerRegister";
 import { NativeBridge } from "@/components/shared/NativeBridge";
 import { AppHydrator } from "@/components/shared/AppHydrator";
+import { KakaoSdkLoader } from "@/components/shared/KakaoSdkLoader";
 import { Toaster } from "@/components/ui/sonner";
 
 export const metadata: Metadata = {
@@ -51,6 +52,7 @@ export default function RootLayout({
         <ServiceWorkerRegister />
         <NativeBridge />
         <AppHydrator />
+        <KakaoSdkLoader />
         {children}
         <Toaster position="top-center" richColors />
       </body>

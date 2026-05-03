@@ -34,6 +34,15 @@ function counterpartName(invite: FriendInviteRow, myUserId: string): string {
   return invite.inviter?.nickname ?? "이름 미상";
 }
 
+/** 상대 gender. 양쪽이 매칭된 invite 에서만 의미. 동성/이성 분기용. */
+function counterpartGender(
+  invite: FriendInviteRow,
+  myUserId: string,
+): 'male' | 'female' | null {
+  if (invite.inviterId === myUserId) return invite.invitee?.gender ?? null;
+  return invite.inviter?.gender ?? null;
+}
+
 function ScoreLabel({
   label,
   score,
@@ -79,7 +88,8 @@ export default function FriendsPage() {
       setErrorMessage(null);
       try {
         const list = await listFriends(token);
-        if (!cancelled) setInvites(list);
+        if (cancelled) return;
+        setInvites(list);
       } catch (e) {
         if (cancelled) return;
         if (e instanceof FriendUnauthorizedError) {
@@ -151,7 +161,22 @@ export default function FriendsPage() {
   }
 
   const list = invites ?? [];
-  const calculated = list.filter((x) => x.status === "calculated" && x.compatibility);
+
+  // 섹션 분리:
+  //  - sentPending: 내가 보낸 초대 중 아직 수락 안 된 것 (status=pending). 친구 아님.
+  //  - friends: 양쪽이 연결된 invite (joined/saju_complete/calculated). "내 친구" 카운트 기준.
+  //  - expired: 만료. 시각적으로 흐릿하게 별도 섹션.
+  // pending 은 inviteeId 가 비어있으니 항상 내가 inviter — 별도 role 검사 불필요.
+  const sentPending = list.filter((x) => x.status === "pending");
+  const friends = list.filter(
+    (x) =>
+      x.status === "joined" ||
+      x.status === "saju_complete" ||
+      x.status === "calculated",
+  );
+  const expired = list.filter((x) => x.status === "expired");
+
+  const calculated = friends.filter((x) => x.status === "calculated" && x.compatibility);
   const bestFriend = calculated.length
     ? [...calculated].sort(
         (a, b) =>
@@ -159,6 +184,9 @@ export default function FriendsPage() {
           (Number(a.compatibility?.generalScore ?? 0)),
       )[0]
     : null;
+
+  const isEmpty =
+    sentPending.length === 0 && friends.length === 0 && expired.length === 0;
 
   return (
     <div className="min-h-screen bg-[var(--background)] px-4 py-6">
@@ -202,8 +230,8 @@ export default function FriendsPage() {
           </Card>
         )}
 
-        {/* 빈 상태 */}
-        {!loading && !errorMessage && list.length === 0 && (
+        {/* 빈 상태 — 어느 섹션에도 invite 없을 때 */}
+        {!loading && !errorMessage && isEmpty && (
           <Card className="border-dashed border-2 border-[var(--muted-foreground)]/20 shadow-none bg-transparent">
             <CardContent className="py-10 text-center space-y-2">
               <p className="text-sm text-[var(--muted-foreground)]">
@@ -216,23 +244,55 @@ export default function FriendsPage() {
           </Card>
         )}
 
-        {/* 친구 목록 */}
-        {!loading && !errorMessage && list.length > 0 && me && (
+        {/* 보낸 초대 (수락 대기) — 친구 카운트엔 포함 X */}
+        {!loading && !errorMessage && sentPending.length > 0 && (
           <div>
             <p className="text-sm font-medium text-[var(--muted-foreground)] mb-3">
-              내 친구 ({list.length}명)
+              보낸 초대 ({sentPending.length}개)
+              <span className="ml-1 text-xs">· 수락 대기</span>
+            </p>
+            <div className="space-y-3">
+              {sentPending.map((invite) => (
+                <Card key={invite.id} className="border-none shadow-sm bg-[var(--muted)]/40">
+                  <CardContent className="py-3">
+                    <span className="font-medium text-[var(--muted-foreground)]">
+                      친구가 아직 수락하지 않았어요
+                    </span>
+                    <p className="text-xs text-[var(--muted-foreground)]">
+                      초대 {timeSince(invite.createdAt)}
+                    </p>
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* 내 친구 — 수락된 invite 만 (joined / saju_complete / calculated) */}
+        {!loading && !errorMessage && friends.length > 0 && me && (
+          <div>
+            <p className="text-sm font-medium text-[var(--muted-foreground)] mb-3">
+              내 친구 ({friends.length}명)
             </p>
 
             <div className="space-y-3">
-              {list.map((invite) => {
+              {friends.map((invite) => {
                 const name = counterpartName(invite, me.id);
                 const compat = invite.compatibility ?? null;
 
                 if (invite.status === "calculated" && compat) {
+                  // 동성 친구는 연인/깊은 궁합 의미 X — 일반 궁합만 표시.
+                  // 이성 친구는 3종 모두 표시 (연인/깊은은 비프리미엄이면 잠금).
+                  const counterGender = counterpartGender(invite, me.id);
+                  const sameSex =
+                    counterGender !== null && counterGender === me.gender;
                   return (
                     <Card key={invite.id} className="border-none shadow-sm">
                       <CardContent className="py-3">
-                        <Link href={`/friends/${invite.id}`} className="block">
+                        <Link
+                          href={`/friend-detail?id=${encodeURIComponent(invite.id)}`}
+                          className="block"
+                        >
                           <div className="flex items-center justify-between mb-2">
                             <span className="font-medium text-[var(--foreground)]">
                               {name}
@@ -247,18 +307,22 @@ export default function FriendsPage() {
                               score={compat.generalScore}
                               locked={false}
                             />
-                            <br />
-                            <ScoreLabel
-                              label="연인 궁합"
-                              score={compat.romanticScore}
-                              locked={!isPremium}
-                            />
-                            <br />
-                            <ScoreLabel
-                              label="깊은 궁합"
-                              score={compat.deepScore}
-                              locked={!isPremium}
-                            />
+                            {!sameSex && (
+                              <>
+                                <br />
+                                <ScoreLabel
+                                  label="연인 궁합"
+                                  score={compat.romanticScore}
+                                  locked={!isPremium}
+                                />
+                                <br />
+                                <ScoreLabel
+                                  label="깊은 궁합"
+                                  score={compat.deepScore}
+                                  locked={!isPremium}
+                                />
+                              </>
+                            )}
                           </div>
                         </Link>
                       </CardContent>
@@ -266,28 +330,11 @@ export default function FriendsPage() {
                   );
                 }
 
-                if (invite.status === "expired") {
-                  return (
-                    <Card key={invite.id} className="border-none shadow-sm">
-                      <CardContent className="py-3 opacity-60">
-                        <span className="font-medium text-[var(--muted-foreground)]">
-                          {name}
-                        </span>
-                        <p className="text-xs text-[var(--muted-foreground)]">
-                          만료됨 · {timeSince(invite.createdAt)}
-                        </p>
-                      </CardContent>
-                    </Card>
-                  );
-                }
-
-                // pending / joined / saju_complete — 사주 완비 대기
+                // joined / saju_complete — 사주 완비 대기
                 const subText =
-                  invite.status === "pending"
-                    ? `사주 입력 대기 중 · 초대 ${timeSince(invite.createdAt)}`
-                    : invite.status === "joined"
-                      ? "친구가 사주 입력 중이에요"
-                      : "양쪽 사주 완비 — 잠시 후 계산돼요";
+                  invite.status === "joined"
+                    ? "친구가 사주 입력 중이에요"
+                    : "양쪽 사주 완비 — 잠시 후 계산돼요";
                 return (
                   <Card key={invite.id} className="border-none shadow-sm">
                     <CardContent className="py-3">
@@ -303,10 +350,33 @@ export default function FriendsPage() {
           </div>
         )}
 
-        {/* 통계 */}
+        {/* 만료된 초대 — 정리 차원에서 마지막 섹션, 흐리게 */}
+        {!loading && !errorMessage && expired.length > 0 && me && (
+          <div>
+            <p className="text-sm font-medium text-[var(--muted-foreground)] mb-3">
+              만료된 초대 ({expired.length}개)
+            </p>
+            <div className="space-y-3">
+              {expired.map((invite) => (
+                <Card key={invite.id} className="border-none shadow-sm">
+                  <CardContent className="py-3 opacity-60">
+                    <span className="font-medium text-[var(--muted-foreground)]">
+                      {counterpartName(invite, me.id)}
+                    </span>
+                    <p className="text-xs text-[var(--muted-foreground)]">
+                      만료됨 · {timeSince(invite.createdAt)}
+                    </p>
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* 통계 — 수락된 친구 기준 */}
         {!loading && calculated.length > 0 && (
           <div className="text-center text-xs text-[var(--muted-foreground)] py-2">
-            총 {list.length}명 초대 · {calculated.length}명 궁합 확인 완료
+            친구 {friends.length}명 · {calculated.length}명 궁합 확인 완료
             {bestFriend && me && (
               <>
                 <br />

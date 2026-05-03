@@ -10,6 +10,7 @@
  */
 
 import { Share } from '@capacitor/share';
+import { shareInviteViaKakao } from './kakaoShare';
 
 export type ShareInviteResult = 'shared' | 'cancelled' | 'fallback-copied';
 
@@ -49,7 +50,12 @@ export async function shareInvite({
   const text = `${inviterNickname}님이 사주 궁합 보러 오라고 초대했어요`;
   const title = '緣 — 친구 사주 궁합';
 
-  // 1) Native (iOS/Android via Capacitor) — 시스템 share sheet
+  // 1a) KakaoLink 우선 — SDK 로드되고 init 통과한 경우. 라벨이 약속하는 동작.
+  //     origin 거부/SDK 미로드 시 false → Capacitor Share fallback.
+  const kakaoOk = await shareInviteViaKakao({ inviteUrl: url, inviterNickname });
+  if (kakaoOk) return 'shared';
+
+  // 1b) Native (iOS/Android via Capacitor) — 시스템 share sheet (KakaoLink 실패 시)
   if (isNativePlatform()) {
     try {
       await Share.share({ title, text, url, dialogTitle: '친구에게 초대 보내기' });
