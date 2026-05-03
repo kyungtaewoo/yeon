@@ -15,6 +15,7 @@ import {
   type GeneralBreakdown,
   type RomanticBreakdown,
   type DeepBreakdown,
+  type BreakdownExplanation,
   FriendInviteForbiddenError,
   FriendInviteNotFoundError,
   FriendNetworkError,
@@ -153,6 +154,49 @@ function BreakdownGrid<K extends string>({
         </div>
       ))}
     </div>
+  );
+}
+
+/**
+ * v3 — 항목별 해설 카드. explanations 가 있을 때만 사용.
+ * BreakdownGrid 와 다른 점: 점수만이 아니라 명리학 해설 단락까지.
+ */
+function ExplanationCards<K extends string>({
+  values,
+  explanations,
+}: {
+  values: Record<K, number>;
+  explanations: Record<K, BreakdownExplanation>;
+}) {
+  const keys = Object.keys(explanations) as K[];
+  return (
+    <div className="space-y-3">
+      {keys.map((k) => {
+        const ex = explanations[k];
+        return (
+          <div key={k} className="rounded-md border border-[var(--muted-foreground)]/10 p-3">
+            <div className="flex items-baseline justify-between">
+              <p className="text-xs font-medium text-[var(--foreground)]">{ex.title}</p>
+              <span className="text-xs text-[var(--muted-foreground)]">
+                {Math.round(values[k])}점
+              </span>
+            </div>
+            <p className="mt-1.5 text-xs leading-relaxed text-[var(--muted-foreground)]">
+              {ex.explanation}
+            </p>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function OutroLine({ text }: { text?: string | null }) {
+  if (!text) return null;
+  return (
+    <p className="mt-3 rounded bg-[var(--brand-gold)]/5 px-3 py-2 text-xs italic text-[var(--foreground)]">
+      {text}
+    </p>
   );
 }
 
@@ -486,14 +530,20 @@ function ActiveTierDetail({
   if (tier === "general") {
     const b = compat.generalBreakdown;
     if (!b) return <EmptyTier />;
+    const summary = b.summary ?? b.narrative;
     return (
       <Card className="border-none shadow-sm">
         <CardContent className="py-4 space-y-3">
-          <p className="text-sm text-[var(--foreground)]">{b.narrative}</p>
+          <p className="text-sm leading-relaxed text-[var(--foreground)]">{summary}</p>
           <div className="border-t border-[var(--muted-foreground)]/10 pt-3">
-            <BreakdownGrid values={b.breakdown} labels={GENERAL_LABEL} />
+            {b.explanations ? (
+              <ExplanationCards values={b.breakdown} explanations={b.explanations} />
+            ) : (
+              <BreakdownGrid values={b.breakdown} labels={GENERAL_LABEL} />
+            )}
           </div>
           <FactorList factors={b.factors} />
+          <OutroLine text={b.outro} />
         </CardContent>
       </Card>
     );
@@ -503,10 +553,11 @@ function ActiveTierDetail({
     if (!isPremium) return <PremiumLock label="연인 궁합" />;
     const b = compat.romanticBreakdown;
     if (!b) return <EmptyTier />;
+    const summary = b.summary ?? b.narrative;
     return (
       <Card className="border-none shadow-sm">
         <CardContent className="py-4 space-y-3">
-          <p className="text-sm text-[var(--foreground)]">{b.narrative}</p>
+          <p className="text-sm leading-relaxed text-[var(--foreground)]">{summary}</p>
           <div className="grid grid-cols-2 gap-2 text-xs">
             <div className="rounded bg-[var(--muted-foreground)]/5 p-2 text-center">
               <span className="text-[var(--muted-foreground)]">결혼 적합</span>
@@ -518,9 +569,14 @@ function ActiveTierDetail({
             </div>
           </div>
           <div className="border-t border-[var(--muted-foreground)]/10 pt-3">
-            <BreakdownGrid values={b.breakdown} labels={ROMANTIC_LABEL} />
+            {b.explanations ? (
+              <ExplanationCards values={b.breakdown} explanations={b.explanations} />
+            ) : (
+              <BreakdownGrid values={b.breakdown} labels={ROMANTIC_LABEL} />
+            )}
           </div>
           <FactorList factors={b.factors} />
+          <OutroLine text={b.outro} />
         </CardContent>
       </Card>
     );
@@ -530,14 +586,20 @@ function ActiveTierDetail({
   if (!isPremium) return <PremiumLock label="깊은 궁합" />;
   const b = compat.deepBreakdown;
   if (!b) return <EmptyTier />;
+  const summary = b.summary ?? b.narrative.summary;
   return (
     <Card className="border-none shadow-sm">
       <CardContent className="py-4 space-y-3">
-        <p className="text-sm text-[var(--foreground)]">{b.narrative.summary}</p>
+        <p className="text-sm leading-relaxed text-[var(--foreground)]">{summary}</p>
         <div className="border-t border-[var(--muted-foreground)]/10 pt-3">
-          <BreakdownGrid values={b.breakdown} labels={DEEP_LABEL} />
+          {b.explanations ? (
+            <ExplanationCards values={b.breakdown} explanations={b.explanations} />
+          ) : (
+            <BreakdownGrid values={b.breakdown} labels={DEEP_LABEL} />
+          )}
         </div>
-        {b.narrative.details.length > 0 && (
+        {/* 레거시 narrative.details — explanations 없을 때만 fallback 으로 표시 */}
+        {!b.explanations && b.narrative.details.length > 0 && (
           <div className="border-t border-[var(--muted-foreground)]/10 pt-3 space-y-2">
             {b.narrative.details.map((d, i) => (
               <div key={i}>
@@ -555,6 +617,7 @@ function ActiveTierDetail({
           </div>
         )}
         <FactorList factors={b.factors} />
+        <OutroLine text={b.outro} />
       </CardContent>
     </Card>
   );

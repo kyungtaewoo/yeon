@@ -54,9 +54,17 @@ export interface VerifyInviteResponse {
 
 /**
  * Breakdown 은 saju-engine 의 calculateXxxCompatibility 반환값 그대로 직렬화된 JSONB.
- * 키는 frontend lib (apps/web/src/lib/saju/compatibility-{general,romantic,deep}.ts)
- * 의 Result 타입과 동일. 둘이 분기되면 화면이 깨지므로 한쪽 변경 시 양쪽 같이.
+ *
+ * v3 컨텐츠 확장:
+ *   summary / outro / explanations 가 풍부한 단락 단위 서사.
+ *   기존 narrative 는 호환성을 위해 남겨두지만 신규 화면은 summary 우선 사용.
+ *   재계산 안 된 친구는 summary 가 undefined 이므로 fallback 필수.
  */
+export interface BreakdownExplanation {
+  title: string;
+  explanation: string;
+}
+
 export interface GeneralBreakdown {
   totalScore: number;
   breakdown: {
@@ -66,6 +74,13 @@ export interface GeneralBreakdown {
     tenGods: number;
     wonJin: number;
   };
+  /** v3 — 점수 5단계 기반 단락 서사 */
+  summary?: string;
+  /** v3 — 점수 5단계 기반 마무리 한 줄 */
+  outro?: string;
+  /** v3 — 항목별 점수 3단계 기반 해설 */
+  explanations?: Record<'yearBranch' | 'monthPillar' | 'elements' | 'tenGods' | 'wonJin', BreakdownExplanation>;
+  /** @deprecated v3 부터 summary 사용 */
   narrative: string;
   factors: string[];
 }
@@ -81,6 +96,10 @@ export interface RomanticBreakdown {
     yearMonth: number;
     peachBlossom: number;
   };
+  summary?: string;
+  outro?: string;
+  explanations?: Record<'dayGan' | 'dayJi' | 'officialStar' | 'yearMonth' | 'peachBlossom', BreakdownExplanation>;
+  /** @deprecated v3 부터 summary 사용 */
   narrative: string;
   factors: string[];
 }
@@ -94,6 +113,10 @@ export interface DeepBreakdown {
     innerComplement: number;
     yinyangBalance: number;
   };
+  summary?: string;
+  outro?: string;
+  explanations?: Record<'unconscious' | 'emotional' | 'attraction' | 'innerComplement' | 'yinyangBalance', BreakdownExplanation>;
+  /** @deprecated v3 부터 summary 사용. 구조 차이 주의 — Deep 만 객체. */
   narrative: {
     summary: string;
     details: { label: string; score: number; description: string }[];

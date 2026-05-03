@@ -17,6 +17,11 @@ import {
   PEACH_BLOSSOM, STEM_TO_ELEMENT, ELEMENT_GENERATES, ELEMENT_OVERCOMES,
 } from './constants';
 import { getTenGod } from './tenGods';
+import {
+  getScoreBand5, getScoreBand3,
+  ROMANTIC_SUMMARY, ROMANTIC_BREAKDOWN, ROMANTIC_OUTRO,
+  type RomanticKey, type BreakdownExplanation,
+} from './narratives';
 
 // ============================================================
 // 결과 타입
@@ -33,8 +38,15 @@ export interface RomanticCompatibilityResult {
     yearMonth: number;    // 연주+월주
     peachBlossom: number; // 도화살
   };
-  narrative: string;
+  /** 점수 구간(5단계) 기반 전체 서사 — 4-5문장 */
+  summary: string;
+  /** 점수 구간(5단계) 기반 마무리 조언 — 1-2문장 */
+  outro: string;
+  /** 항목별 점수 구간(3단계) 기반 해설 */
+  explanations: Record<RomanticKey, BreakdownExplanation>;
   factors: string[];
+  /** @deprecated summary 사용. 하위 호환 별칭. */
+  narrative: string;
   preview: { dayGanMatch: number }; // 무료 유저용 미리보기 (5점 만점)
 }
 
@@ -185,17 +197,17 @@ export function calculateRomanticCompatibility(
   // 연애 스타일 호환도 (끌림 + 도화 위주)
   const styleScore = Math.round(dayGanScore * 0.4 + peachScore * 0.3 + dayJiScore * 0.3);
 
-  // 서사
-  let narrative: string;
-  if (totalScore >= 85) {
-    narrative = `천생연분이라 할 수 있는 궁합입니다. 만나면 자연스럽게 끌리고, 결혼 후에도 안정적인 가정을 꾸릴 수 있는 조합이에요.`;
-  } else if (totalScore >= 70) {
-    narrative = `매우 좋은 연인 궁합입니다. 서로의 장점을 잘 알아보고, 함께 성장할 수 있는 관계에요.`;
-  } else if (totalScore >= 55) {
-    narrative = `좋은 궁합입니다. 약간의 노력과 배려로 더욱 깊은 인연이 될 수 있어요.`;
-  } else {
-    narrative = `서로 다른 매력을 가진 관계입니다. 차이를 존중하면 의외의 시너지를 발견할 수 있어요.`;
-  }
+  // 서사 (템플릿 기반)
+  const totalBand = getScoreBand5(totalScore);
+  const summary = ROMANTIC_SUMMARY[totalBand];
+  const outro = ROMANTIC_OUTRO[totalBand];
+  const explanations: Record<RomanticKey, BreakdownExplanation> = {
+    dayGan: ROMANTIC_BREAKDOWN.dayGan[getScoreBand3(dayGanScore)],
+    dayJi: ROMANTIC_BREAKDOWN.dayJi[getScoreBand3(dayJiScore)],
+    officialStar: ROMANTIC_BREAKDOWN.officialStar[getScoreBand3(officialStarScore)],
+    yearMonth: ROMANTIC_BREAKDOWN.yearMonth[getScoreBand3(yearMonthScore)],
+    peachBlossom: ROMANTIC_BREAKDOWN.peachBlossom[getScoreBand3(peachScore)],
+  };
 
   return {
     totalScore,
@@ -208,8 +220,11 @@ export function calculateRomanticCompatibility(
       yearMonth: yearMonthScore,
       peachBlossom: peachScore,
     },
-    narrative,
+    summary,
+    outro,
+    explanations,
     factors,
+    narrative: summary,
     preview: { dayGanMatch },
   };
 }

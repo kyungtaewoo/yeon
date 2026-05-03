@@ -17,6 +17,11 @@ import {
 } from './constants';
 import { analyzeJijangGanCompatibility, JIJANG_GAN } from './jigangjang';
 import { calculateElementScores, getDominantElement, getWeakestElement } from './elements';
+import {
+  getScoreBand5, getScoreBand3,
+  DEEP_SUMMARY, DEEP_BREAKDOWN, DEEP_OUTRO,
+  type DeepKey, type BreakdownExplanation,
+} from './narratives';
 
 // ============================================================
 // 십이운성 (十二運星) — 일간 기준, 지지별 운성
@@ -91,11 +96,18 @@ export interface DeepCompatibilityResult {
     innerComplement: number; // 내면 보완도 (오행)
     yinyangBalance: number;  // 음양 밸런스
   };
+  /** 점수 구간(5단계) 기반 전체 서사 — 5-6문장 */
+  summary: string;
+  /** 점수 구간(5단계) 기반 마무리 조언 — 1-2문장 */
+  outro: string;
+  /** 항목별 점수 구간(3단계) 기반 해설 */
+  explanations: Record<DeepKey, BreakdownExplanation>;
+  factors: string[];
+  /** @deprecated 하위 호환 — 프런트엔드 마이그레이션 후 제거 예정 */
   narrative: {
     summary: string;
     details: { label: string; score: number; description: string }[];
   };
-  factors: string[];
 }
 
 // ============================================================
@@ -137,7 +149,19 @@ export function calculateDeepCompatibility(
     yinyangBalance * 0.15
   );
 
-  // 서사 생성
+  // 서사 생성 (템플릿 기반)
+  const totalBand = getScoreBand5(totalScore);
+  const summary = DEEP_SUMMARY[totalBand];
+  const outro = DEEP_OUTRO[totalBand];
+  const explanations: Record<DeepKey, BreakdownExplanation> = {
+    unconscious: DEEP_BREAKDOWN.unconscious[getScoreBand3(unconscious)],
+    emotional: DEEP_BREAKDOWN.emotional[getScoreBand3(emotional)],
+    attraction: DEEP_BREAKDOWN.attraction[getScoreBand3(attraction)],
+    innerComplement: DEEP_BREAKDOWN.innerComplement[getScoreBand3(innerComplement)],
+    yinyangBalance: DEEP_BREAKDOWN.yinyangBalance[getScoreBand3(yinyangBalance)],
+  };
+
+  // 하위 호환 — 프런트엔드 마이그레이션 후 제거
   const narrative = buildNarrative(totalScore, {
     unconscious, emotional, attraction, innerComplement, yinyangBalance,
   }, sajuA, sajuB);
@@ -145,8 +169,11 @@ export function calculateDeepCompatibility(
   return {
     totalScore,
     breakdown: { unconscious, emotional, attraction, innerComplement, yinyangBalance },
-    narrative,
+    summary,
+    outro,
+    explanations,
     factors,
+    narrative,
   };
 }
 

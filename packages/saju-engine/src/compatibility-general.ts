@@ -18,6 +18,11 @@ import {
 } from './constants';
 import { calculateElementScores } from './elements';
 import { getTenGod, getTenGodGroup } from './tenGods';
+import {
+  getScoreBand5, getScoreBand3,
+  GENERAL_SUMMARY, GENERAL_BREAKDOWN, GENERAL_OUTRO,
+  type GeneralKey, type BreakdownExplanation,
+} from './narratives';
 
 // ============================================================
 // 결과 타입
@@ -32,8 +37,16 @@ export interface GeneralCompatibilityResult {
     tenGods: number;      // 십성 역할
     wonJin: number;       // 원진살
   };
-  narrative: string;
+  /** 점수 구간(5단계) 기반 전체 서사 — 3-4문장 */
+  summary: string;
+  /** 점수 구간(5단계) 기반 마무리 조언 — 1-2문장 */
+  outro: string;
+  /** 항목별 점수 구간(3단계) 기반 해설 — title + explanation */
+  explanations: Record<GeneralKey, BreakdownExplanation>;
+  /** 동적 팩트 — 점수 가감 사유 한 줄씩 */
   factors: string[];
+  /** @deprecated v3.x 부터는 summary 사용. 하위 호환용 별칭. */
+  narrative: string;
 }
 
 // ============================================================
@@ -186,17 +199,17 @@ export function calculateGeneralCompatibility(
     wonJinScore * 0.10
   );
 
-  // ── 서사 생성 ──
-  let narrative: string;
-  if (totalScore >= 80) {
-    narrative = '서로의 강점을 살리는 최고의 파트너 조합입니다. 함께 일하거나 친구로 지내면 큰 시너지를 발휘할 수 있어요.';
-  } else if (totalScore >= 65) {
-    narrative = '서로 다른 강점을 가진 보완적 관계입니다. 업무에서 함께하면 시너지가 높은 조합이에요.';
-  } else if (totalScore >= 50) {
-    narrative = '무난한 관계이지만, 서로의 차이를 인정하면 더 좋은 협력이 가능합니다.';
-  } else {
-    narrative = '성향 차이가 있지만, 그만큼 새로운 관점을 주고받을 수 있는 관계입니다.';
-  }
+  // ── 서사 생성 (템플릿 기반) ──
+  const totalBand = getScoreBand5(totalScore);
+  const summary = GENERAL_SUMMARY[totalBand];
+  const outro = GENERAL_OUTRO[totalBand];
+  const explanations: Record<GeneralKey, BreakdownExplanation> = {
+    yearBranch: GENERAL_BREAKDOWN.yearBranch[getScoreBand3(yearBranchScore)],
+    monthPillar: GENERAL_BREAKDOWN.monthPillar[getScoreBand3(monthScore)],
+    elements: GENERAL_BREAKDOWN.elements[getScoreBand3(elementsScore)],
+    tenGods: GENERAL_BREAKDOWN.tenGods[getScoreBand3(tenGodsScore)],
+    wonJin: GENERAL_BREAKDOWN.wonJin[getScoreBand3(wonJinScore)],
+  };
 
   return {
     totalScore,
@@ -207,8 +220,11 @@ export function calculateGeneralCompatibility(
       tenGods: tenGodsScore,
       wonJin: wonJinScore,
     },
-    narrative,
+    summary,
+    outro,
+    explanations,
     factors,
+    narrative: summary,
   };
 }
 
