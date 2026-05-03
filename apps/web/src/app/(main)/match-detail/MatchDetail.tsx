@@ -156,6 +156,10 @@ export function MatchDetail() {
             </h1>
             <Badge variant={status.tone}>{status.text}</Badge>
           </div>
+          {/* 출처 배지 — 천생연분 vs 탐색하기 구분 */}
+          <span className="inline-flex items-center gap-1 rounded-full bg-[var(--brand-gold)]/10 px-2 py-0.5 text-[11px] text-[var(--brand-gold)]">
+            {match.source === "ideal_match" ? "🔮 천생연분" : "✨ 탐색하기"}
+          </span>
           {counterpart && (
             <p className="text-xs text-[var(--muted-foreground)]">
               {counterpart.gender === "male" ? "남성" : "여성"}

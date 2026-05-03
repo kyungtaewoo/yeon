@@ -1,7 +1,7 @@
 import { Controller, Post, Get, Body, Param, Query, UseGuards, Request } from '@nestjs/common';
 import type { CompatibilityWeights } from '@yeon/saju-engine';
 import { MatchingService } from './matching.service';
-import type { ContactMethods } from './entities/match.entity';
+import type { ContactMethods, MatchSource } from './entities/match.entity';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 
 @Controller('matching')
@@ -76,6 +76,7 @@ export class MatchingController {
       kakaoTalkIdShared?: string | null;
       openChatRoomUrl?: string | null;
       openChatPassword?: string | null;
+      source?: MatchSource;
     },
   ) {
     return this.service.propose(req.user.id, body?.targetId, {
@@ -84,6 +85,7 @@ export class MatchingController {
       kakaoTalkIdShared: body?.kakaoTalkIdShared ?? null,
       openChatRoomUrl: body?.openChatRoomUrl ?? null,
       openChatPassword: body?.openChatPassword ?? null,
+      source: body?.source,
     });
   }
 

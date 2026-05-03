@@ -16,7 +16,7 @@ import {
 } from '@yeon/saju-engine';
 import { User } from '../users/entities/user.entity';
 import { SajuProfile } from '../saju/entities/saju-profile.entity';
-import { Match, MatchDecision, ContactMethods } from './entities/match.entity';
+import { Match, MatchDecision, ContactMethods, MatchSource } from './entities/match.entity';
 import { IdealSajuProfile } from './entities/ideal-saju-profile.entity';
 import { NotificationGateway } from '../notification/notification.gateway';
 import { PaymentService } from '../payment/payment.service';
@@ -189,6 +189,7 @@ export class MatchingService {
       kakaoTalkIdShared?: string | null;
       openChatRoomUrl?: string | null;
       openChatPassword?: string | null;
+      source?: MatchSource;
     },
   ): Promise<Match> {
     if (senderId === targetId) {
@@ -290,6 +291,7 @@ export class MatchingService {
       idealMatchScore: compat.totalScore,
       compatibilityScore: null,
       status: 'proposed',
+      source: input.source === 'ideal_match' ? 'ideal_match' : 'discovery',
       userADecision: 'accepted', // 제안 = 암묵 수락
       userBDecision: null,
       contactMethods: { kakaoId: wantsKakaoId, openChat: wantsOpenChat },

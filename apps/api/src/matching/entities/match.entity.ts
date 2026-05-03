@@ -19,6 +19,13 @@ export type MatchStatus = 'proposed' | 'accepted' | 'rejected' | 'expired';
 
 export type MatchDecision = 'pending' | 'accepted' | 'rejected';
 
+/**
+ * 매칭 시도 출처:
+ *   - 'discovery'   — /discover (탐색하기) 에서 후보 발견 후 제안
+ *   - 'ideal_match' — 천생연분 (저장된 ideal saju) 에 일치하는 사람을 통해 제안 (v2.2)
+ */
+export type MatchSource = 'discovery' | 'ideal_match';
+
 export interface ContactMethods {
   kakaoId?: boolean;
   openChat?: boolean;
@@ -80,6 +87,10 @@ export class Match {
   // 모델 C (제안-승낙)
   // userA = 제안자 (sender), userB = 받는 사람 (receiver)
   // ─────────────────────────────────────────────────────────
+
+  /** 매칭 시도 출처 — 'discovery' (탐색하기) | 'ideal_match' (천생연분) */
+  @Column({ type: 'varchar', default: 'discovery' })
+  source: MatchSource;
 
   /** 제안자가 선택한 연락 방법 — { kakaoId?: true, openChat?: true } */
   @Column({ type: 'jsonb', nullable: true })

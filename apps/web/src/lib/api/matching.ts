@@ -9,6 +9,9 @@ export type MatchStatus = 'proposed' | 'accepted' | 'rejected' | 'expired';
 
 export type MatchDecision = 'pending' | 'accepted' | 'rejected';
 
+/** 매칭 시도 출처 — 'discovery' (탐색하기) | 'ideal_match' (천생연분, v2.2) */
+export type MatchSource = 'discovery' | 'ideal_match';
+
 export interface ContactMethods {
   kakaoId?: boolean;
   openChat?: boolean;
@@ -21,6 +24,7 @@ export interface MatchEntity {
   idealMatchScore: number | null;
   compatibilityScore: number | null;
   status: MatchStatus;
+  source: MatchSource;
   userADecision: MatchDecision | null;
   userBDecision: MatchDecision | null;
   contactMethods: ContactMethods | null;
@@ -173,6 +177,7 @@ export interface ProposeInput {
   kakaoTalkIdShared?: string | null;
   openChatRoomUrl?: string | null;
   openChatPassword?: string | null;
+  source?: MatchSource;
 }
 
 /** POST /matching/propose */

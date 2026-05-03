@@ -13,6 +13,7 @@ import {
   setMyKakaoTalkId,
   type ContactMethods,
   type ProposalQuota,
+  type MatchSource,
 } from "@/lib/api/matching";
 
 const MESSAGE_PLACEHOLDER = "예: 사주 보니 좋은 인연 같아서 연락드려요";
@@ -28,6 +29,7 @@ export function Propose() {
   const score = sp.get("score") ?? "";
   const dayPillar = sp.get("dayPillar") ?? "";
   const ageRange = sp.get("ageRange") ?? "";
+  const source: MatchSource = sp.get("source") === "ideal_match" ? "ideal_match" : "discovery";
 
   const [methods, setMethods] = useState<ContactMethods>({ kakaoId: false, openChat: false });
   const [kakaoTalkId, setKakaoTalkId] = useState("");
@@ -105,6 +107,7 @@ export function Propose() {
         kakaoTalkIdShared: methods.kakaoId ? kakaoTalkId.trim() : null,
         openChatRoomUrl: methods.openChat ? openChatUrl.trim() : null,
         openChatPassword: methods.openChat ? openChatPwd.trim() : null,
+        source,
       });
       toast.success(`${nickname}님께 제안을 보냈어요`);
       router.replace("/matches");

@@ -21,6 +21,12 @@ function formatRelative(when: number | string): string {
   return `${d}일 전`;
 }
 
+/** 매칭 출처 라벨 — 'discovery' / 'ideal_match' 분기 */
+function sourceLabel(source: MatchEntity["source"]): { emoji: string; text: string } {
+  if (source === "ideal_match") return { emoji: "🔮", text: "천생연분" };
+  return { emoji: "✨", text: "탐색하기" };
+}
+
 function MatchRow({
   match,
   myId,
@@ -36,6 +42,7 @@ function MatchRow({
   const isProposer = match.userAId === myId;
   const counterpartLabel = isProposer ? "받는 사람" : "제안자";
   const dateIso = match.proposedAt ?? match.createdAt;
+  const src = sourceLabel(match.source);
 
   let badgeText = "";
   let badgeVariant: "default" | "secondary" | "destructive" = "secondary";
@@ -57,14 +64,17 @@ function MatchRow({
     >
       <CardContent className="py-3 flex items-center justify-between">
         <div className="flex-1 min-w-0">
-          <p className="text-sm">
-            <span className="text-[var(--muted-foreground)]">{counterpartLabel}</span>
+          <div className="flex items-center gap-2">
+            <span className="inline-flex items-center gap-0.5 rounded-full bg-[var(--brand-gold)]/10 px-2 py-0.5 text-[10px] text-[var(--brand-gold)]">
+              {src.emoji} {src.text}
+            </span>
+            <span className="text-[11px] text-[var(--muted-foreground)]">{counterpartLabel}</span>
             {score != null && (
-              <span className="ml-2 text-[var(--brand-gold)] font-bold">
+              <span className="text-[var(--brand-gold)] font-bold text-sm">
                 {Math.round(Number(score))}점
               </span>
             )}
-          </p>
+          </div>
           {match.proposalMessage && (
             <p className="mt-1 text-[11px] text-[var(--muted-foreground)] truncate">
               "{match.proposalMessage}"
