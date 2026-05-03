@@ -88,10 +88,10 @@ export function Discover() {
       <div className="mx-auto max-w-md space-y-5">
         <button
           type="button"
-          onClick={() => router.replace("/matches")}
+          onClick={() => router.replace("/find")}
           className="text-sm text-[var(--muted-foreground)]"
         >
-          ← 매칭
+          ← 인연 찾기
         </button>
 
         <header className="space-y-1">

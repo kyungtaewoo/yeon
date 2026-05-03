@@ -30,7 +30,7 @@ export function handleAddError(error: SavedMatchesError, router: Router): void {
         : `현재 ${error.details.current}/${error.details.limit} · 기존 인연을 삭제한 뒤 다시 시도해주세요.`,
       action: isFree
         ? { label: '프리미엄 알아보기', onClick: () => router.push('/premium') }
-        : { label: '매칭 탭', onClick: () => router.push('/matches') },
+        : { label: '인연 찾기', onClick: () => router.push('/find') },
     });
     return;
   }

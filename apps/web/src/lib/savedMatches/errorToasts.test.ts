@@ -47,15 +47,15 @@ describe('handleAddError', () => {
     expect(mockRouter.push).toHaveBeenCalledWith('/premium');
   });
 
-  it('LIMIT_EXCEEDED + premium → "매칭 탭" action + /matches navigate', () => {
+  it('LIMIT_EXCEEDED + premium → "인연 찾기" action + /find navigate', () => {
     handleAddError(
       new SavedMatchesLimitExceededError('full', { current: 10, limit: 10, tier: 'premium' }),
       mockRouter,
     );
     const call = (toast.error as ReturnType<typeof vi.fn>).mock.calls[0][1];
-    expect(call.action.label).toBe('매칭 탭');
+    expect(call.action.label).toBe('인연 찾기');
     call.action.onClick();
-    expect(mockRouter.push).toHaveBeenCalledWith('/matches');
+    expect(mockRouter.push).toHaveBeenCalledWith('/find');
   });
 
   it('DUPLICATE → toast.info', () => {

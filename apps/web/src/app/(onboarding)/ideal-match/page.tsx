@@ -287,7 +287,7 @@ export default function IdealMatchPage() {
           ? "기존 매칭 대상을 삭제한 뒤 다시 시도해주세요."
           : "프리미엄으로 업그레이드하면 최대 10개까지 등록할 수 있어요.",
         action: isPremium
-          ? { label: "매칭 탭", onClick: () => router.push("/matches") }
+          ? { label: "인연 찾기", onClick: () => router.push("/find") }
           : { label: "프리미엄 보기", onClick: () => router.push("/premium") },
       });
       return;
@@ -296,9 +296,9 @@ export default function IdealMatchPage() {
     const result = await useSavedMatchesStore.getState().addOptimistic(profile, token);
     if (result.ok) {
       toast.success("내 인연 목록에 담았어요", {
-        description: "매칭 탭에서 확인할 수 있어요.",
+        description: "인연 찾기 탭에서 확인할 수 있어요.",
       });
-      router.push("/matches");
+      router.push("/find");
       return;
     }
     handleAddError(result.error, router);
@@ -400,7 +400,7 @@ export default function IdealMatchPage() {
         {/* 매칭 탭으로 가기 (이미 등록된 항목 확인용) */}
         {savedMatches.length > 0 && (
           <Button
-            onClick={() => router.push("/matches")}
+            onClick={() => router.push("/find")}
             variant="outline"
             className="w-full border-[var(--brand-gold)] text-[var(--brand-gold)] py-5 text-sm"
           >
