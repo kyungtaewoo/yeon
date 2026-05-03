@@ -82,11 +82,8 @@ function HomeInner() {
         const res = await apiClient<{ matches: MatchSummary[] }>('/matching', { token });
         const recent = res.matches.slice(0, 5);
         setMatches(recent);
-        setPendingCount(
-          recent.filter((m) =>
-            ["notified", "a_accepted", "b_accepted"].includes(m.status),
-          ).length,
-        );
+        // 모델 C — 받은 제안만 카운트 (proposed 상태 + 받는쪽인지 백엔드 분리는 추후)
+        setPendingCount(recent.filter((m) => m.status === "proposed").length);
       } catch (err) {
         console.error("매칭 조회 실패:", err);
       } finally {
@@ -98,12 +95,8 @@ function HomeInner() {
   }, [user, token, authLoading, ingestingToken, router]);
 
   const statusLabels: Record<string, { text: string; variant: "default" | "secondary" | "destructive" }> = {
-    pending: { text: "탐색 중", variant: "secondary" },
-    notified: { text: "새 매칭!", variant: "default" },
-    a_accepted: { text: "수락 대기", variant: "secondary" },
-    b_accepted: { text: "수락 대기", variant: "secondary" },
-    both_accepted: { text: "쌍방 수락", variant: "default" },
-    completed: { text: "완료", variant: "default" },
+    proposed: { text: "응답 대기", variant: "secondary" },
+    accepted: { text: "매칭 성사", variant: "default" },
     rejected: { text: "거절됨", variant: "destructive" },
     expired: { text: "만료", variant: "destructive" },
   };

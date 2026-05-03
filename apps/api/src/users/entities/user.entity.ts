@@ -48,6 +48,17 @@ export class User {
   @Column({ type: 'timestamptz', nullable: true })
   premiumExpiresAt: Date;
 
+  /** 매칭 직후 입력 — 카카오톡 친구 ID (오픈톡과 별개). nullable. */
+  @Column({ type: 'text', nullable: true })
+  kakaoTalkId: string | null;
+
+  /** 일일 제안 카운터 — free 5/day, premium 무제한 (체크 우회). KST 자정 리셋. */
+  @Column({ type: 'int', default: 0 })
+  dailyProposalCount: number;
+
+  @Column({ type: 'timestamptz', nullable: true })
+  dailyProposalResetAt: Date | null;
+
   @CreateDateColumn()
   createdAt: Date;
 

@@ -16,7 +16,7 @@ import {
 } from '@yeon/saju-engine';
 import { User } from '../users/entities/user.entity';
 import { SajuProfile } from '../saju/entities/saju-profile.entity';
-import { Match, MatchDecision } from './entities/match.entity';
+import { Match, MatchDecision, ContactMethods } from './entities/match.entity';
 import { IdealSajuProfile } from './entities/ideal-saju-profile.entity';
 import { NotificationGateway } from '../notification/notification.gateway';
 import { PaymentService } from '../payment/payment.service';
@@ -106,112 +106,15 @@ export class MatchingService {
     );
 
     const saved = await this.idealRepo.save(entities);
-
-    // 이상형 프로필이 새로 생겼으므로 역방향 매칭 스캔
-    await this.scanAndCreateMatches(userId);
-
     return saved;
   }
 
   /**
-   * 새 유저의 사주/이상형이 저장된 직후 호출.
-   * 양방향으로 일주(dayStem+dayBranch)가 일치하고
-   * 성별이 반대이며 나이 범위가 맞는 경우 Match 생성 (status=notified).
-   *
-   * Direction A: 기존 유저들의 IdealSajuProfile → 이 유저의 SajuProfile
-   * Direction B: 이 유저의 IdealSajuProfile → 기존 유저들의 SajuProfile
+   * @deprecated 모델 A 잔재 — Model C 도입 후 자동 매칭 row 생성 폐기.
+   * 정밀 매칭 (이상형 후보 가입 알림) 은 후속 PR 에서 별도 이벤트로 재구현.
    */
-  async scanAndCreateMatches(userId: string): Promise<Match[]> {
-    const user = await this.userRepo.findOne({ where: { id: userId } });
-    if (!user || !user.birthDate) return [];
-
-    const [saju, myIdeals] = await Promise.all([
-      this.sajuRepo.findOne({ where: { userId } }),
-      this.idealRepo.find({ where: { userId } }),
-    ]);
-
-    const userAge = calculateAge(user.birthDate);
-    const created: Match[] = [];
-
-    // ── Direction A: 기존 유저들의 이상형이 내 사주의 일주와 일치 ──
-    if (saju) {
-      const candidateIdeals = await this.idealRepo
-        .createQueryBuilder('ideal')
-        .where('ideal.userId != :userId', { userId })
-        .andWhere('ideal.dayStem = :ds', { ds: saju.dayStem })
-        .andWhere('ideal.dayBranch = :db', { db: saju.dayBranch })
-        .getMany();
-
-      if (candidateIdeals.length > 0) {
-        const searcherIds = [...new Set(candidateIdeals.map((i) => i.userId))];
-        const searchers = await this.userRepo.find({ where: { id: In(searcherIds) } });
-        const searcherMap = new Map(searchers.map((u) => [u.id, u]));
-
-        for (const ideal of candidateIdeals) {
-          const searcher = searcherMap.get(ideal.userId);
-          if (!searcher) continue;
-          if (searcher.gender === user.gender) continue;
-          if (userAge < searcher.preferredAgeMin || userAge > searcher.preferredAgeMax) continue;
-
-          const existing = await this.findExistingMatch(searcher.id, user.id);
-          if (existing) continue;
-
-          const m = await this.matchRepo.save(
-            this.matchRepo.create({
-              userAId: searcher.id,
-              userBId: user.id,
-              idealMatchScore: ideal.totalScore,
-              status: 'notified',
-              notifiedAt: new Date(),
-            }),
-          );
-          created.push(m);
-          this.emitMatchNew(m);
-        }
-      }
-    }
-
-    // ── Direction B: 내 이상형이 기존 유저들의 사주 일주와 일치 ──
-    for (const ideal of myIdeals) {
-      const candidates = await this.sajuRepo
-        .createQueryBuilder('s')
-        .where('s.userId != :userId', { userId })
-        .andWhere('s.dayStem = :ds', { ds: ideal.dayStem })
-        .andWhere('s.dayBranch = :db', { db: ideal.dayBranch })
-        .getMany();
-
-      if (candidates.length === 0) continue;
-
-      const candUsers = await this.userRepo.find({
-        where: { id: In(candidates.map((c) => c.userId)) },
-      });
-      const candMap = new Map(candUsers.map((u) => [u.id, u]));
-
-      for (const cand of candidates) {
-        const candUser = candMap.get(cand.userId);
-        if (!candUser || !candUser.birthDate) continue;
-        if (candUser.gender === user.gender) continue;
-        const candAge = calculateAge(candUser.birthDate);
-        if (candAge < user.preferredAgeMin || candAge > user.preferredAgeMax) continue;
-
-        const existing = await this.findExistingMatch(user.id, candUser.id);
-        if (existing) continue;
-
-        const m = await this.matchRepo.save(
-          this.matchRepo.create({
-            userAId: user.id,
-            userBId: candUser.id,
-            idealMatchScore: ideal.totalScore,
-            status: 'notified',
-            notifiedAt: new Date(),
-          }),
-        );
-        created.push(m);
-        this.emitMatchNew(m);
-      }
-    }
-
-    return created;
+  async scanAndCreateMatches(_userId: string): Promise<Match[]> {
+    return [];
   }
 
   private emitMatchNew(m: Match) {
@@ -262,67 +165,231 @@ export class MatchingService {
   }
 
   /**
-   * 관심 표시 — 디스커버리 카드의 "관심 표시" 버튼.
+   * 모델 C — 제안하기 (sender → receiver).
    *
-   * 모델 A (양방향) 흐름:
-   *   - 새 매칭이면: matches row INSERT, status='a_accepted', userADecision='accepted', 상대에게 match:new emit
-   *   - 이미 row 가 있으면: decide() 패턴으로 본인 decision='accepted' update (양쪽 모두 accepted 면 both_accepted)
-   *   - rejected/expired 매칭이면 차단
+   * Q1: 일일 5건 (free) / 무제한 (premium)
+   * Q3: 자유 텍스트 메시지 (max 500자, 옵션)
+   * Q4: 7일 만료
+   * Q5: 모델 A 양방향 폐기, 단방향 propose
+   *
+   * 사전 체크:
+   *   - 본인에게 제안 X
+   *   - 양쪽 사주 입력 완료
+   *   - 기존 row 존재 시 차단 (rejected/expired/proposed/accepted 모두)
+   *   - 일일 한도 (free 만)
+   *   - contactMethods 1개 이상 + 해당 정보 필수
+   *   - 메시지 500자 제한
    */
-  async expressInterest(userId: string, targetId: string): Promise<Match> {
-    if (userId === targetId) {
-      throw new BadRequestException('본인에게는 관심을 표시할 수 없습니다');
+  async propose(
+    senderId: string,
+    targetId: string,
+    input: {
+      contactMethods: ContactMethods;
+      message?: string | null;
+      kakaoTalkIdShared?: string | null;
+      openChatRoomUrl?: string | null;
+      openChatPassword?: string | null;
+    },
+  ): Promise<Match> {
+    if (senderId === targetId) {
+      throw new BadRequestException('본인에게는 제안할 수 없어요');
     }
 
-    const [target, mySaju, theirSaju] = await Promise.all([
+    const [sender, target, mySaju, theirSaju] = await Promise.all([
+      this.userRepo.findOne({ where: { id: senderId } }),
       this.userRepo.findOne({ where: { id: targetId } }),
-      this.sajuRepo.findOne({ where: { userId } }),
+      this.sajuRepo.findOne({ where: { userId: senderId } }),
       this.sajuRepo.findOne({ where: { userId: targetId } }),
     ]);
+    if (!sender) throw new NotFoundException('사용자를 찾을 수 없습니다');
     if (!target) throw new NotFoundException('상대를 찾을 수 없습니다');
     if (!mySaju || !theirSaju) {
-      throw new BadRequestException('양쪽 모두 사주 입력이 필요합니다');
+      throw new BadRequestException('양쪽 모두 사주 입력이 필요해요');
     }
 
-    // 기존 row 확인 — 디스커버리 필터에서 걸러지지만 race condition 안전장치
-    const existing = await this.findExistingMatch(userId, targetId);
+    // contactMethods 검증
+    const cm = input.contactMethods ?? {};
+    const wantsKakaoId = !!cm.kakaoId;
+    const wantsOpenChat = !!cm.openChat;
+    if (!wantsKakaoId && !wantsOpenChat) {
+      throw new BadRequestException('연락 방법을 1개 이상 선택해야 해요');
+    }
+    if (wantsKakaoId && !input.kakaoTalkIdShared?.trim()) {
+      throw new BadRequestException('카카오톡 ID 를 입력해 주세요');
+    }
+    if (wantsOpenChat) {
+      const url = input.openChatRoomUrl?.trim() ?? '';
+      const pwd = input.openChatPassword?.trim() ?? '';
+      if (!url) throw new BadRequestException('오픈채팅 링크를 입력해 주세요');
+      if (!/^https?:\/\/(open\.kakao\.com|qr\.kakao\.com)\//i.test(url)) {
+        throw new BadRequestException('카카오 오픈채팅 링크만 등록할 수 있어요');
+      }
+      if (!pwd) throw new BadRequestException('오픈채팅 비밀번호를 입력해 주세요');
+      if (!/^[0-9]{4}$/.test(pwd)) {
+        throw new BadRequestException('비밀번호는 4자리 숫자로 설정해 주세요');
+      }
+    }
+
+    // 메시지 길이
+    const message = input.message?.trim() || null;
+    if (message && message.length > 500) {
+      throw new BadRequestException('메시지는 500자 이내여야 해요');
+    }
+
+    // 기존 row 존재 시 — 모든 status 에 대해 차단 (영구 차단 포함)
+    const existing = await this.findExistingMatch(senderId, targetId);
     if (existing) {
-      if (existing.status === 'rejected' || existing.status === 'expired') {
-        throw new BadRequestException('종결된 매칭입니다');
+      if (existing.status === 'rejected') {
+        throw new BadRequestException('이미 거절된 상대예요');
       }
-      const myDecisionField = existing.userAId === userId ? 'userADecision' : 'userBDecision';
-      if (existing[myDecisionField] === 'accepted') {
-        throw new BadRequestException('이미 관심을 표시했습니다');
+      if (existing.status === 'accepted') {
+        throw new BadRequestException('이미 매칭된 상대예요');
       }
-      // 기존 decide() 재사용 — both_accepted 전이 + emit 까지 처리
-      return this.decide(existing.id, userId, 'accepted');
+      if (existing.status === 'proposed') {
+        throw new BadRequestException('이미 진행 중인 제안이 있어요');
+      }
+      // expired 는 재제안 허용 — 기존 row 폐기 후 새로
+      await this.matchRepo.delete(existing.id);
     }
 
-    // 새 매칭 INSERT
+    // 일일 한도 (free 만) — KST 자정 리셋
+    if (!sender.isPremium) {
+      const now = new Date();
+      const kstNow = new Date(now.getTime() + 9 * 3600_000);
+      const kstMidnight = new Date(Date.UTC(
+        kstNow.getUTCFullYear(),
+        kstNow.getUTCMonth(),
+        kstNow.getUTCDate(),
+      ) - 9 * 3600_000);
+      const lastReset = sender.dailyProposalResetAt ?? new Date(0);
+      if (lastReset < kstMidnight) {
+        sender.dailyProposalCount = 0;
+        sender.dailyProposalResetAt = kstMidnight;
+      }
+      if (sender.dailyProposalCount >= 5) {
+        throw new BadRequestException(
+          '오늘은 더 이상 제안할 수 없어요. 내일 다시 시도하거나 프리미엄으로 무제한 사용하세요.',
+        );
+      }
+      sender.dailyProposalCount += 1;
+      await this.userRepo.save(sender);
+    }
+
+    // 호환성 점수 — 일반 궁합 기준
     const compat = calculateGeneralCompatibility(
       profileToPillars(mySaju),
       profileToPillars(theirSaju),
     );
+
+    const now = new Date();
+    const expiresAt = new Date(now.getTime() + 7 * 24 * 3600_000);
+
     const match = this.matchRepo.create({
-      userAId: userId,
+      userAId: senderId,
       userBId: targetId,
-      userADecision: 'accepted',
-      userBDecision: null,
-      status: 'a_accepted',
       idealMatchScore: compat.totalScore,
       compatibilityScore: null,
-      notifiedAt: new Date(),
+      status: 'proposed',
+      userADecision: 'accepted', // 제안 = 암묵 수락
+      userBDecision: null,
+      contactMethods: { kakaoId: wantsKakaoId, openChat: wantsOpenChat },
+      proposalMessage: message,
+      kakaoTalkIdShared: wantsKakaoId ? input.kakaoTalkIdShared!.trim() : null,
+      openChatRoomUrl: wantsOpenChat ? input.openChatRoomUrl!.trim() : null,
+      openChatPassword: wantsOpenChat ? input.openChatPassword!.trim() : null,
+      openChatCreatedBy: wantsOpenChat ? senderId : null,
+      openChatCreatedAt: wantsOpenChat ? now : null,
+      proposedAt: now,
+      respondedAt: null,
+      notifiedAt: now,
+      expiresAt,
     });
     const saved = await this.matchRepo.save(match);
 
-    // 상대에게 새 매칭 알림 — 가짜 user 면 emit silently fail (정상)
-    this.notifications.emitToUser(targetId, 'match:new', {
+    this.notifications.emitToUser(targetId, 'match:proposed', {
       id: saved.id,
       score: compat.totalScore,
-      by: userId,
+      from: senderId,
+      message,
     });
 
     return saved;
+  }
+
+  /**
+   * 받는쪽 응답 — 수락 또는 거절.
+   *   - accepted: status='accepted', respondedAt set, 양쪽 알림
+   *   - rejected: status='rejected', 영구 차단, 제안자 알림
+   * 받는쪽이 수락 시 본인 카톡 ID 추가 공유 가능 (옵션).
+   */
+  async respondToProposal(
+    matchId: string,
+    userId: string,
+    decision: 'accepted' | 'rejected',
+    extra?: { kakaoTalkIdResponse?: string | null },
+  ): Promise<Match> {
+    const match = await this.getMatch(matchId, userId);
+    if (match.userBId !== userId) {
+      throw new ForbiddenException('받는 쪽만 응답할 수 있어요');
+    }
+    if (match.status !== 'proposed') {
+      throw new BadRequestException(`이미 ${match.status} 상태인 제안이에요`);
+    }
+    // lazy expiry
+    if (match.expiresAt && match.expiresAt < new Date()) {
+      match.status = 'expired';
+      await this.matchRepo.save(match);
+      throw new BadRequestException('제안이 만료됐어요 (7일 경과)');
+    }
+
+    match.userBDecision = decision;
+    match.respondedAt = new Date();
+
+    if (decision === 'accepted') {
+      match.status = 'accepted';
+      const cleanId = extra?.kakaoTalkIdResponse?.trim();
+      if (cleanId) match.kakaoTalkIdResponse = cleanId;
+    } else {
+      match.status = 'rejected';
+    }
+
+    const saved = await this.matchRepo.save(match);
+
+    const event = decision === 'accepted' ? 'match:accepted' : 'match:rejected';
+    this.notifications.emitToUser(match.userAId, event, {
+      id: saved.id,
+      status: saved.status,
+      by: userId,
+    });
+    if (decision === 'accepted') {
+      this.notifications.emitToUser(match.userBId, 'match:accepted', {
+        id: saved.id,
+        status: saved.status,
+        by: userId,
+      });
+    }
+
+    return saved;
+  }
+
+  /** 일일 제안 카운트 조회 — free 한도 표시용. */
+  async getProposalQuota(userId: string): Promise<{ used: number; limit: number; isPremium: boolean }> {
+    const user = await this.userRepo.findOne({ where: { id: userId } });
+    if (!user) throw new NotFoundException('사용자를 찾을 수 없습니다');
+    if (user.isPremium) return { used: 0, limit: -1, isPremium: true };
+
+    const now = new Date();
+    const kstNow = new Date(now.getTime() + 9 * 3600_000);
+    const kstMidnight = new Date(Date.UTC(
+      kstNow.getUTCFullYear(),
+      kstNow.getUTCMonth(),
+      kstNow.getUTCDate(),
+    ) - 9 * 3600_000);
+    const lastReset = user.dailyProposalResetAt ?? new Date(0);
+    if (lastReset < kstMidnight) {
+      return { used: 0, limit: 5, isPremium: false };
+    }
+    return { used: user.dailyProposalCount, limit: 5, isPremium: false };
   }
 
   /**
@@ -433,7 +500,7 @@ export class MatchingService {
   }
 
   /**
-   * 매칭 상세 (UI 용) — 상대방 닉네임/사주/나이까지 함께 반환.
+   * 매칭 상세 (UI 용) — 상대방 닉네임/사주/나이 + 오픈채팅 메타까지 함께 반환.
    * 클라이언트가 추가 호출 없이 디테일 화면을 그릴 수 있도록 enrich.
    */
   async getMatchDetail(matchId: string, currentUserId: string) {
@@ -446,10 +513,23 @@ export class MatchingService {
     ]);
 
     const myDecision = match.userAId === currentUserId ? match.userADecision : match.userBDecision;
+    const openChatCreatedByMe =
+      match.openChatCreatedBy != null && match.openChatCreatedBy === currentUserId;
+    const isProposer = match.userAId === currentUserId;
+    const isReceiver = match.userBId === currentUserId;
+
+    // lazy expiry — proposed 상태이고 7일 지나면 expired 처리 후 반환
+    if (match.status === 'proposed' && match.expiresAt && match.expiresAt < new Date()) {
+      match.status = 'expired';
+      await this.matchRepo.save(match);
+    }
 
     return {
       match,
       myDecision,
+      openChatCreatedByMe,
+      isProposer,
+      isReceiver,
       counterpart: counterpart
         ? {
             id: counterpart.id,
@@ -471,54 +551,29 @@ export class MatchingService {
     };
   }
 
-  accept(matchId: string, userId: string): Promise<Match> {
-    return this.decide(matchId, userId, 'accepted');
+  /**
+   * 사용자가 본인 카카오톡 ID 를 프로필에 등록 (제안 화면에서 호출).
+   * 다음 제안부터 자동 prefill 가능.
+   */
+  async setMyKakaoTalkId(userId: string, kakaoTalkId: string): Promise<User> {
+    const user = await this.userRepo.findOne({ where: { id: userId } });
+    if (!user) throw new NotFoundException('사용자를 찾을 수 없습니다');
+    const trimmed = (kakaoTalkId || '').trim();
+    if (!trimmed) throw new BadRequestException('ID 가 비어있어요');
+    if (trimmed.length > 64) throw new BadRequestException('ID 가 너무 길어요');
+    user.kakaoTalkId = trimmed;
+    return this.userRepo.save(user);
   }
 
-  reject(matchId: string, userId: string): Promise<Match> {
-    return this.decide(matchId, userId, 'rejected');
+  /**
+   * @deprecated 모델 A — accept/reject 는 모델 C respondToProposal 로 대체.
+   * 호환성 위해 alias 유지: userBId 라면 respondToProposal 로 라우팅.
+   */
+  async accept(matchId: string, userId: string): Promise<Match> {
+    return this.respondToProposal(matchId, userId, 'accepted');
   }
 
-  private async decide(
-    matchId: string,
-    userId: string,
-    decision: Exclude<MatchDecision, 'pending'>,
-  ): Promise<Match> {
-    const match = await this.getMatch(matchId, userId);
-
-    if (match.status === 'completed' || match.status === 'expired') {
-      throw new BadRequestException(`이미 ${match.status} 상태인 매칭입니다`);
-    }
-
-    const isUserA = match.userAId === userId;
-    if (isUserA) match.userADecision = decision;
-    else match.userBDecision = decision;
-
-    if (decision === 'rejected') {
-      match.status = 'rejected';
-    } else {
-      const aAccepted = match.userADecision === 'accepted';
-      const bAccepted = match.userBDecision === 'accepted';
-      if (aAccepted && bAccepted) match.status = 'both_accepted';
-      else if (aAccepted) match.status = 'a_accepted';
-      else if (bAccepted) match.status = 'b_accepted';
-    }
-
-    const saved = await this.matchRepo.save(match);
-
-    // 상대방에게 알림
-    const counterpartId = isUserA ? match.userBId : match.userAId;
-    const event = decision === 'rejected'
-      ? 'match:rejected'
-      : saved.status === 'both_accepted'
-        ? 'match:completed'
-        : 'match:accepted';
-    this.notifications.emitToUser(counterpartId, event, {
-      id: saved.id,
-      status: saved.status,
-      by: userId,
-    });
-
-    return saved;
+  async reject(matchId: string, userId: string): Promise<Match> {
+    return this.respondToProposal(matchId, userId, 'rejected');
   }
 }

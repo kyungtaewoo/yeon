@@ -2,14 +2,12 @@
 
 import { useEffect, useState, useCallback } from "react";
 import { useRouter } from "next/navigation";
-import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { useAuthStore } from "@/stores/authStore";
 import { ApiError } from "@/lib/api";
 import {
   getDiscovery,
-  expressInterest,
   type DiscoveryCandidate,
   type DiscoveryTier,
 } from "@/lib/api/matching";
@@ -27,9 +25,6 @@ export function Discover() {
   const [candidates, setCandidates] = useState<DiscoveryCandidate[]>([]);
   const [loading, setLoading] = useState(true);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
-  // 관심 표시한 후보 id 집합 — 카드 비활성화/메시지 변경용 (재로드 없이 즉시 반영)
-  const [interested, setInterested] = useState<Set<string>>(new Set());
-  const [actingId, setActingId] = useState<string | null>(null);
 
   // 필터 — 적용 시점에 fetch (debounce 대신 명시적 "적용" 버튼)
   const [tier, setTier] = useState<DiscoveryTier>("romantic");
@@ -66,19 +61,15 @@ export function Discover() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [token]);
 
-  const handleInterest = async (candidateId: string) => {
-    if (!token || actingId) return;
-    setActingId(candidateId);
-    try {
-      await expressInterest(token, candidateId);
-      setInterested((prev) => new Set(prev).add(candidateId));
-      toast.success("관심을 표시했어요");
-    } catch (e) {
-      const msg = e instanceof Error ? e.message : "처리에 실패했어요";
-      toast.error(msg);
-    } finally {
-      setActingId(null);
-    }
+  const handlePropose = (c: DiscoveryCandidate) => {
+    const qs = new URLSearchParams({
+      targetId: c.id,
+      nickname: c.nickname,
+      score: String(c.score),
+      dayPillar: c.dayPillar,
+      ageRange: c.ageRange,
+    });
+    router.push(`/propose?${qs.toString()}`);
   };
 
   if (!token) {
@@ -230,9 +221,7 @@ export function Discover() {
               <DiscoveryCard
                 key={c.id}
                 candidate={c}
-                isInterested={interested.has(c.id)}
-                isActing={actingId === c.id}
-                onInterest={() => handleInterest(c.id)}
+                onPropose={() => handlePropose(c)}
               />
             ))}
           </div>
@@ -244,21 +233,13 @@ export function Discover() {
 
 function DiscoveryCard({
   candidate,
-  isInterested,
-  isActing,
-  onInterest,
+  onPropose,
 }: {
   candidate: DiscoveryCandidate;
-  isInterested: boolean;
-  isActing: boolean;
-  onInterest: () => void;
+  onPropose: () => void;
 }) {
   return (
-    <Card
-      className={`border-none shadow-sm overflow-hidden transition-opacity ${
-        isInterested ? "opacity-60" : ""
-      }`}
-    >
+    <Card className="border-none shadow-sm overflow-hidden">
       <div className="h-1 bg-[var(--brand-gold)]" />
       <CardContent className="py-4 space-y-3">
         <div className="flex items-baseline justify-between">
@@ -285,15 +266,10 @@ function DiscoveryCard({
         </p>
         <Button
           type="button"
-          onClick={onInterest}
-          disabled={isInterested || isActing}
-          className={`w-full ${
-            isInterested
-              ? "bg-[var(--muted-foreground)]/20 text-[var(--muted-foreground)]"
-              : "bg-[var(--brand-red)] text-white"
-          }`}
+          onClick={onPropose}
+          className="w-full bg-[var(--brand-red)] text-white"
         >
-          {isInterested ? "관심 표시함" : isActing ? "처리 중..." : "관심 표시"}
+          제안하기
         </Button>
       </CardContent>
     </Card>

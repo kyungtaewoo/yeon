@@ -1,22 +1,18 @@
 import { apiClient } from '.';
 
 // ---------------------------------------------------------------------------
-// 응답 타입 — apps/api/src/matching/matching.service.ts getMatchDetail() 와 1:1.
-// 변경 시 양쪽 같이.
+// 응답 타입 — apps/api/src/matching/matching.service.ts 와 1:1.
+// 모델 C (제안-승낙). 변경 시 양쪽 같이.
 // ---------------------------------------------------------------------------
 
-export type MatchStatus =
-  | 'pending'
-  | 'notified'
-  | 'a_accepted'
-  | 'b_accepted'
-  | 'both_accepted'
-  | 'payment_pending'
-  | 'completed'
-  | 'rejected'
-  | 'expired';
+export type MatchStatus = 'proposed' | 'accepted' | 'rejected' | 'expired';
 
 export type MatchDecision = 'pending' | 'accepted' | 'rejected';
+
+export interface ContactMethods {
+  kakaoId?: boolean;
+  openChat?: boolean;
+}
 
 export interface MatchEntity {
   id: string;
@@ -27,8 +23,17 @@ export interface MatchEntity {
   status: MatchStatus;
   userADecision: MatchDecision | null;
   userBDecision: MatchDecision | null;
+  contactMethods: ContactMethods | null;
+  proposalMessage: string | null;
+  kakaoTalkIdShared: string | null;
+  kakaoTalkIdResponse: string | null;
+  openChatRoomUrl: string | null;
+  openChatPassword: string | null;
+  openChatCreatedBy: string | null;
+  openChatCreatedAt: string | null;
+  proposedAt: string | null;
+  respondedAt: string | null;
   notifiedAt: string | null;
-  completedAt: string | null;
   expiresAt: string | null;
   createdAt: string;
 }
@@ -56,6 +61,9 @@ export interface MatchCounterpartSaju {
 export interface MatchDetailResponse {
   match: MatchEntity;
   myDecision: MatchDecision | null;
+  openChatCreatedByMe: boolean;
+  isProposer: boolean;
+  isReceiver: boolean;
   counterpart: MatchCounterpart | null;
   counterpartSaju: MatchCounterpartSaju | null;
 }
@@ -75,26 +83,37 @@ export async function getMatchDetail(
   );
 }
 
-/** POST /matching/:id/accept */
+/** POST /matching/:id/respond — 받는쪽 수락/거절 */
+export async function respondToProposal(
+  token: string,
+  matchId: string,
+  decision: 'accepted' | 'rejected',
+  extra?: { kakaoTalkIdResponse?: string | null },
+): Promise<MatchEntity> {
+  return apiClient<MatchEntity>(
+    `/matching/${encodeURIComponent(matchId)}/respond`,
+    {
+      method: 'POST',
+      token,
+      body: { decision, ...extra },
+    },
+  );
+}
+
+/** @deprecated alias — /respond 사용 권장 */
 export async function acceptMatch(
   token: string,
   matchId: string,
 ): Promise<MatchEntity> {
-  return apiClient<MatchEntity>(
-    `/matching/${encodeURIComponent(matchId)}/accept`,
-    { method: 'POST', token },
-  );
+  return respondToProposal(token, matchId, 'accepted');
 }
 
-/** POST /matching/:id/reject */
+/** @deprecated alias — /respond 사용 권장 */
 export async function rejectMatch(
   token: string,
   matchId: string,
 ): Promise<MatchEntity> {
-  return apiClient<MatchEntity>(
-    `/matching/${encodeURIComponent(matchId)}/reject`,
-    { method: 'POST', token },
-  );
+  return respondToProposal(token, matchId, 'rejected');
 }
 
 // ---------------------------------------------------------------------------
@@ -143,14 +162,50 @@ export async function getDiscovery(
   return apiClient<DiscoveryResponse>(path, { token });
 }
 
-/** POST /matching/express-interest */
-export async function expressInterest(
+// ---------------------------------------------------------------------------
+// 모델 C — 제안-승낙
+// ---------------------------------------------------------------------------
+
+export interface ProposeInput {
+  targetId: string;
+  contactMethods: ContactMethods;
+  message?: string | null;
+  kakaoTalkIdShared?: string | null;
+  openChatRoomUrl?: string | null;
+  openChatPassword?: string | null;
+}
+
+/** POST /matching/propose */
+export async function proposeMatch(
   token: string,
-  targetId: string,
+  input: ProposeInput,
 ): Promise<MatchEntity> {
-  return apiClient<MatchEntity>('/matching/express-interest', {
+  return apiClient<MatchEntity>('/matching/propose', {
     method: 'POST',
     token,
-    body: { targetId },
+    body: input,
+  });
+}
+
+export interface ProposalQuota {
+  used: number;
+  limit: number; // -1 == unlimited (premium)
+  isPremium: boolean;
+}
+
+/** GET /matching/quota */
+export async function getProposalQuota(token: string): Promise<ProposalQuota> {
+  return apiClient<ProposalQuota>('/matching/quota', { token });
+}
+
+/** POST /matching/me/kakao-talk-id */
+export async function setMyKakaoTalkId(
+  token: string,
+  kakaoTalkId: string,
+): Promise<{ kakaoTalkId: string }> {
+  return apiClient<{ kakaoTalkId: string }>('/matching/me/kakao-talk-id', {
+    method: 'POST',
+    token,
+    body: { kakaoTalkId },
   });
 }

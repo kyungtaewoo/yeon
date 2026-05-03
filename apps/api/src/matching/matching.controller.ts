@@ -1,6 +1,7 @@
 import { Controller, Post, Get, Body, Param, Query, UseGuards, Request } from '@nestjs/common';
 import type { CompatibilityWeights } from '@yeon/saju-engine';
 import { MatchingService } from './matching.service';
+import type { ContactMethods } from './entities/match.entity';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 
 @Controller('matching')
@@ -60,10 +61,43 @@ export class MatchingController {
     });
   }
 
-  /** POST /matching/express-interest — 디스커버리 카드의 "관심 표시" */
-  @Post('express-interest')
-  async expressInterest(@Request() req: any, @Body() body: { targetId: string }) {
-    return this.service.expressInterest(req.user.id, body?.targetId);
+  /**
+   * POST /matching/propose — 모델 C 제안하기.
+   * Body: { targetId, contactMethods, message?, kakaoTalkIdShared?, openChatRoomUrl?, openChatPassword? }
+   */
+  @Post('propose')
+  async propose(
+    @Request() req: any,
+    @Body()
+    body: {
+      targetId: string;
+      contactMethods: ContactMethods;
+      message?: string | null;
+      kakaoTalkIdShared?: string | null;
+      openChatRoomUrl?: string | null;
+      openChatPassword?: string | null;
+    },
+  ) {
+    return this.service.propose(req.user.id, body?.targetId, {
+      contactMethods: body?.contactMethods,
+      message: body?.message ?? null,
+      kakaoTalkIdShared: body?.kakaoTalkIdShared ?? null,
+      openChatRoomUrl: body?.openChatRoomUrl ?? null,
+      openChatPassword: body?.openChatPassword ?? null,
+    });
+  }
+
+  /** GET /matching/quota — 일일 제안 한도 사용량 */
+  @Get('quota')
+  async quota(@Request() req: any) {
+    return this.service.getProposalQuota(req.user.id);
+  }
+
+  /** POST /matching/me/kakao-talk-id — 본인 카카오톡 ID 등록 */
+  @Post('me/kakao-talk-id')
+  async setKakaoTalkId(@Request() req: any, @Body() body: { kakaoTalkId: string }) {
+    const updated = await this.service.setMyKakaoTalkId(req.user.id, body?.kakaoTalkId);
+    return { kakaoTalkId: updated.kakaoTalkId };
   }
 
   /** GET /matching/:id — 매칭 상세 (상대방 닉네임/사주 포함) */
@@ -72,13 +106,32 @@ export class MatchingController {
     return this.service.getMatchDetail(id, req.user.id);
   }
 
-  /** POST /matching/:id/accept */
+  /**
+   * POST /matching/:id/respond — 받는쪽 수락/거절.
+   * Body: { decision: 'accepted' | 'rejected', kakaoTalkIdResponse? }
+   */
+  @Post(':id/respond')
+  async respond(
+    @Request() req: any,
+    @Param('id') id: string,
+    @Body()
+    body: {
+      decision: 'accepted' | 'rejected';
+      kakaoTalkIdResponse?: string | null;
+    },
+  ) {
+    return this.service.respondToProposal(id, req.user.id, body?.decision, {
+      kakaoTalkIdResponse: body?.kakaoTalkIdResponse ?? null,
+    });
+  }
+
+  /** @deprecated 호환용 — 모델 C 에서는 /respond 사용 */
   @Post(':id/accept')
   async accept(@Request() req: any, @Param('id') id: string) {
     return this.service.accept(id, req.user.id);
   }
 
-  /** POST /matching/:id/reject */
+  /** @deprecated 호환용 — 모델 C 에서는 /respond 사용 */
   @Post(':id/reject')
   async reject(@Request() req: any, @Param('id') id: string) {
     return this.service.reject(id, req.user.id);
