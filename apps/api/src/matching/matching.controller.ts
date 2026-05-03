@@ -38,6 +38,21 @@ export class MatchingController {
     return { matches };
   }
 
+  /**
+   * GET /matching/discovery — 호환성 기반 디스커버리.
+   * NestJS 라우트 우선순위 — 반드시 GET :id 보다 위에 정의.
+   */
+  @Get('discovery')
+  async discovery(@Request() req: any) {
+    return this.service.discoverCandidates(req.user.id);
+  }
+
+  /** POST /matching/express-interest — 디스커버리 카드의 "관심 표시" */
+  @Post('express-interest')
+  async expressInterest(@Request() req: any, @Body() body: { targetId: string }) {
+    return this.service.expressInterest(req.user.id, body?.targetId);
+  }
+
   /** GET /matching/:id — 매칭 상세 (상대방 닉네임/사주 포함) */
   @Get(':id')
   async getMatch(@Request() req: any, @Param('id') id: string) {

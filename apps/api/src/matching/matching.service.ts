@@ -6,6 +6,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, In } from 'typeorm';
 import {
   findIdealMatchesV2,
+  calculateGeneralCompatibility,
   type CompatibilityWeights,
   type FourPillars,
   type HeavenlyStem,
@@ -36,6 +37,15 @@ function profileToPillars(p: SajuProfile): FourPillars {
       ? { stem: p.hourStem as HeavenlyStem, branch: p.hourBranch as EarthlyBranch }
       : null,
   };
+}
+
+/** 점수 → 이모지 + 라벨. FriendDetail.tsx 의 scoreFlavor 와 동일 매핑 (5단계). */
+function scoreFlavor(score: number): { emoji: string; label: string } {
+  if (score >= 95) return { emoji: '🌟', label: '환상적' };
+  if (score >= 85) return { emoji: '💛', label: '마음 통함' };
+  if (score >= 70) return { emoji: '🤝', label: '안정적' };
+  if (score >= 55) return { emoji: '⚡', label: '다름이 매력' };
+  return { emoji: '🌪️', label: '노력 필요' };
 }
 
 @Injectable()
@@ -247,6 +257,150 @@ export class MatchingService {
       throw new ForbiddenException('이 매칭에 대한 권한이 없습니다');
     }
     return match;
+  }
+
+  /**
+   * 관심 표시 — 디스커버리 카드의 "관심 표시" 버튼.
+   *
+   * 모델 A (양방향) 흐름:
+   *   - 새 매칭이면: matches row INSERT, status='a_accepted', userADecision='accepted', 상대에게 match:new emit
+   *   - 이미 row 가 있으면: decide() 패턴으로 본인 decision='accepted' update (양쪽 모두 accepted 면 both_accepted)
+   *   - rejected/expired 매칭이면 차단
+   */
+  async expressInterest(userId: string, targetId: string): Promise<Match> {
+    if (userId === targetId) {
+      throw new BadRequestException('본인에게는 관심을 표시할 수 없습니다');
+    }
+
+    const [target, mySaju, theirSaju] = await Promise.all([
+      this.userRepo.findOne({ where: { id: targetId } }),
+      this.sajuRepo.findOne({ where: { userId } }),
+      this.sajuRepo.findOne({ where: { userId: targetId } }),
+    ]);
+    if (!target) throw new NotFoundException('상대를 찾을 수 없습니다');
+    if (!mySaju || !theirSaju) {
+      throw new BadRequestException('양쪽 모두 사주 입력이 필요합니다');
+    }
+
+    // 기존 row 확인 — 디스커버리 필터에서 걸러지지만 race condition 안전장치
+    const existing = await this.findExistingMatch(userId, targetId);
+    if (existing) {
+      if (existing.status === 'rejected' || existing.status === 'expired') {
+        throw new BadRequestException('종결된 매칭입니다');
+      }
+      const myDecisionField = existing.userAId === userId ? 'userADecision' : 'userBDecision';
+      if (existing[myDecisionField] === 'accepted') {
+        throw new BadRequestException('이미 관심을 표시했습니다');
+      }
+      // 기존 decide() 재사용 — both_accepted 전이 + emit 까지 처리
+      return this.decide(existing.id, userId, 'accepted');
+    }
+
+    // 새 매칭 INSERT
+    const compat = calculateGeneralCompatibility(
+      profileToPillars(mySaju),
+      profileToPillars(theirSaju),
+    );
+    const match = this.matchRepo.create({
+      userAId: userId,
+      userBId: targetId,
+      userADecision: 'accepted',
+      userBDecision: null,
+      status: 'a_accepted',
+      idealMatchScore: compat.totalScore,
+      compatibilityScore: null,
+      notifiedAt: new Date(),
+    });
+    const saved = await this.matchRepo.save(match);
+
+    // 상대에게 새 매칭 알림 — 가짜 user 면 emit silently fail (정상)
+    this.notifications.emitToUser(targetId, 'match:new', {
+      id: saved.id,
+      score: compat.totalScore,
+      by: userId,
+    });
+
+    return saved;
+  }
+
+  /**
+   * 호환성 기반 디스커버리.
+   * - 본인 제외
+   * - 반대 성별
+   * - 사주 입력 완료자 (isOnboardingComplete=true)
+   * - 나이 = 본인 preferredAgeMin/Max 범위
+   * - 이미 matches row 가 있는 상대 전부 제외 (rejected 영구 차단 포함)
+   * - 일반 호환성 70점 이상, 점수 desc, 상위 20명
+   */
+  async discoverCandidates(userId: string) {
+    const me = await this.userRepo.findOne({ where: { id: userId } });
+    if (!me) throw new NotFoundException('사용자를 찾을 수 없습니다');
+    const mySaju = await this.sajuRepo.findOne({ where: { userId } });
+    if (!mySaju) {
+      throw new BadRequestException('사주 정보를 먼저 입력해주세요');
+    }
+
+    const oppositeGender = me.gender === 'male' ? 'female' : 'male';
+    const myPillars = profileToPillars(mySaju);
+
+    // 매칭/거절 이력 — 모든 status 제외 (중복 방지 + 영구 차단)
+    const existingMatches = await this.matchRepo.find({
+      where: [{ userAId: userId }, { userBId: userId }],
+    });
+    const excludeIds = new Set<string>([
+      userId,
+      ...existingMatches.map((m) => (m.userAId === userId ? m.userBId : m.userAId)),
+    ]);
+
+    // 1차 fetch — 반대 성별 + 사주 입력 완료
+    const candidates = await this.userRepo.find({
+      where: { gender: oppositeGender, isOnboardingComplete: true },
+    });
+
+    const ageFiltered = candidates.filter((u) => {
+      if (excludeIds.has(u.id)) return false;
+      if (!u.birthDate) return false;
+      const age = calculateAge(u.birthDate);
+      return age >= me.preferredAgeMin && age <= me.preferredAgeMax;
+    });
+
+    if (ageFiltered.length === 0) return { candidates: [], total: 0 };
+
+    // 사주 일괄 fetch (N+1 방지)
+    const sajus = await this.sajuRepo.find({
+      where: { userId: In(ageFiltered.map((u) => u.id)) },
+    });
+    const sajuByUserId = new Map(sajus.map((s) => [s.userId, s]));
+
+    const scored = ageFiltered
+      .map((u) => {
+        const saju = sajuByUserId.get(u.id);
+        if (!saju) return null;
+        const theirPillars = profileToPillars(saju);
+        const compat = calculateGeneralCompatibility(myPillars, theirPillars);
+        const age = calculateAge(u.birthDate!);
+        const flavor = scoreFlavor(compat.totalScore);
+        const summary = (compat.summary ?? compat.narrative ?? '').toString();
+        // 첫 문장 — "...입니다." 까지. 마침표가 없으면 전체.
+        const firstSentenceMatch = summary.match(/^[^.!?]+[.!?]/);
+        const summaryOneLiner = firstSentenceMatch ? firstSentenceMatch[0].trim() : summary;
+        return {
+          id: u.id,
+          nickname: u.nickname,
+          score: compat.totalScore,
+          emoji: flavor.emoji,
+          label: flavor.label,
+          dayPillar: `${saju.dayStem}${saju.dayBranch}`,
+          gender: u.gender,
+          ageRange: `${Math.floor(age / 10) * 10}대`,
+          summaryOneLiner,
+        };
+      })
+      .filter((c): c is NonNullable<typeof c> => c !== null && c.score >= 70);
+
+    scored.sort((a, b) => b.score - a.score);
+    const limited = scored.slice(0, 20);
+    return { candidates: limited, total: limited.length };
   }
 
   /**
