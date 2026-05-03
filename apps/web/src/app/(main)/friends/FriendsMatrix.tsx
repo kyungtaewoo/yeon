@@ -1,5 +1,6 @@
 "use client";
 
+import { useState, useMemo } from "react";
 import Link from "next/link";
 import type { FriendInviteRow } from "@/lib/api/friends";
 
@@ -9,6 +10,8 @@ interface Props {
   myGender: 'male' | 'female';
   isPremium: boolean;
 }
+
+type SortKey = 'general' | 'romantic' | 'deep';
 
 function counterpartName(invite: FriendInviteRow, myUserId: string): string {
   if (invite.inviterId === myUserId) return invite.invitee?.nickname ?? "이름 미상";
@@ -30,43 +33,89 @@ function medalForRank(rank: number): string | null {
   return null;
 }
 
+function getScore(invite: FriendInviteRow, key: SortKey): number | null {
+  const c = invite.compatibility;
+  if (!c) return null;
+  if (key === 'general') return c.generalScore != null ? Number(c.generalScore) : null;
+  if (key === 'romantic') return c.romanticScore != null ? Number(c.romanticScore) : null;
+  return c.deepScore != null ? Number(c.deepScore) : null;
+}
+
 /**
  * 친구 궁합 매트릭스 — 친구 row × 궁합 종류 column.
  *
- * 정렬: 일반 점수 desc (Q3=A 결정)
- * 메달: 일반 column 만 (1/2/3 위)
- * 동성 친구: 연인/깊은 cell = '동성'
- * 비프리미엄: 연인/깊은 cell = '🔒'
+ * 정렬: 헤더 클릭으로 일반/연인/깊은 desc 전환 (기본 일반)
+ * 메달: 활성 sort column 의 1/2/3 위 (점수 null 인 친구 제외)
+ * 동성 친구: 연인/깊은 cell = '동성'  (해당 column 으로 sort 시 점수 없음 → 하단)
+ * 비프리미엄: 연인/깊은 헤더 disabled (sort 불가) + cell = '🔒'
  * Row click → /friend-detail?id=...
  *
- * 호출부 (friends/page.tsx) 가 calculated.length >= 3 일 때만 렌더 — 그 이하면 카드 레이아웃 유지.
+ * 호출부 (friends/page.tsx) 가 calculated.length >= 3 일 때만 렌더.
  */
 export function FriendsMatrix({ friends, myUserId, myGender, isPremium }: Props) {
-  const sorted = [...friends].sort((a, b) => {
-    const sa = Number(a.compatibility?.generalScore ?? 0);
-    const sb = Number(b.compatibility?.generalScore ?? 0);
-    return sb - sa;
-  });
+  const [sortKey, setSortKey] = useState<SortKey>('general');
+
+  const { sorted, rankByInviteId } = useMemo(() => {
+    // sort: score 있는 row 먼저 (desc), 없는 row 는 뒤로
+    const withScore: { invite: FriendInviteRow; score: number }[] = [];
+    const withoutScore: FriendInviteRow[] = [];
+    for (const inv of friends) {
+      const s = getScore(inv, sortKey);
+      if (s == null) withoutScore.push(inv);
+      else withScore.push({ invite: inv, score: s });
+    }
+    withScore.sort((a, b) => b.score - a.score);
+
+    // 메달은 점수 있는 행에 한해서만 1/2/3 부여
+    const rankByInviteId = new Map<string, number>();
+    withScore.forEach(({ invite }, idx) => {
+      rankByInviteId.set(invite.id, idx + 1);
+    });
+
+    const sorted = [...withScore.map((x) => x.invite), ...withoutScore];
+    return { sorted, rankByInviteId };
+  }, [friends, sortKey]);
+
+  const canSort: Record<SortKey, boolean> = {
+    general: true,
+    romantic: isPremium,
+    deep: isPremium,
+  };
 
   return (
     <div className="rounded-lg border border-[var(--border)] bg-white overflow-hidden">
-      {/* 헤더 — 친구 col 1.3fr + 점수 3 col 1fr + chevron 자리 (탭 가능 표시) */}
+      {/* 헤더 — 친구 col 1.3fr + 점수 3 col 1fr + chevron 자리 */}
       <div className="grid grid-cols-[minmax(0,1.3fr)_repeat(3,minmax(0,1fr))_18px] bg-[var(--brand-gold)]/5 text-[11px] font-medium text-[var(--muted-foreground)] border-b border-[var(--border)]">
         <div className="px-3 py-2">친구</div>
-        <div className="px-1 py-2 text-center">일반궁합</div>
-        <div className="px-1 py-2 text-center">연인궁합</div>
-        <div className="px-1 py-2 text-center">깊은궁합</div>
+        <SortHeader
+          label="일반궁합"
+          active={sortKey === 'general'}
+          enabled={canSort.general}
+          onClick={() => setSortKey('general')}
+        />
+        <SortHeader
+          label="연인궁합"
+          active={sortKey === 'romantic'}
+          enabled={canSort.romantic}
+          onClick={() => setSortKey('romantic')}
+        />
+        <SortHeader
+          label="깊은궁합"
+          active={sortKey === 'deep'}
+          enabled={canSort.deep}
+          onClick={() => setSortKey('deep')}
+        />
         <div className="py-2" />
       </div>
 
       {/* 행 */}
-      {sorted.map((invite, idx) => {
+      {sorted.map((invite) => {
         const name = counterpartName(invite, myUserId);
         const compat = invite.compatibility!;
         const counterGender = counterpartGender(invite, myUserId);
         const sameSex = counterGender !== null && counterGender === myGender;
-        const generalRank = idx + 1;
-        const medal = medalForRank(generalRank);
+        const rank = rankByInviteId.get(invite.id);
+        const medal = rank ? medalForRank(rank) : null;
 
         return (
           <Link
@@ -80,29 +129,27 @@ export function FriendsMatrix({ friends, myUserId, myGender, isPremium }: Props)
                 {name}
               </span>
             </div>
-            {/* 일반 — 항상 표시 + 메달 */}
             <Cell
               score={compat.generalScore}
               locked={false}
               sameSex={false}
-              medal={medal}
-              accent
+              medal={sortKey === 'general' ? medal : null}
+              activeSort={sortKey === 'general'}
             />
-            {/* 연인 */}
             <Cell
               score={compat.romanticScore}
               locked={!isPremium}
               sameSex={sameSex}
-              medal={null}
+              medal={sortKey === 'romantic' ? medal : null}
+              activeSort={sortKey === 'romantic'}
             />
-            {/* 깊은 */}
             <Cell
               score={compat.deepScore}
               locked={!isPremium}
               sameSex={sameSex}
-              medal={null}
+              medal={sortKey === 'deep' ? medal : null}
+              activeSort={sortKey === 'deep'}
             />
-            {/* 탭 가능 표시 */}
             <div className="flex items-center justify-end pr-1.5 text-[var(--muted-foreground)]">
               <span aria-hidden className="text-sm">›</span>
             </div>
@@ -113,41 +160,73 @@ export function FriendsMatrix({ friends, myUserId, myGender, isPremium }: Props)
   );
 }
 
+function SortHeader({
+  label,
+  active,
+  enabled,
+  onClick,
+}: {
+  label: string;
+  active: boolean;
+  enabled: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={enabled ? onClick : undefined}
+      disabled={!enabled}
+      aria-pressed={active}
+      className={`px-1 py-2 text-center transition-colors ${
+        active
+          ? "text-[var(--brand-gold)] font-bold"
+          : enabled
+            ? "hover:bg-[var(--brand-gold)]/10"
+            : "opacity-50 cursor-not-allowed"
+      }`}
+    >
+      <span>{label}</span>
+      {active && <span className="ml-0.5">↓</span>}
+      {!enabled && <span className="ml-0.5">🔒</span>}
+    </button>
+  );
+}
+
 function Cell({
   score,
   locked,
   sameSex,
   medal,
-  accent,
+  activeSort,
 }: {
   score: number | null;
   locked: boolean;
   sameSex: boolean;
   medal: string | null;
-  accent?: boolean;
+  activeSort: boolean;
 }) {
   if (sameSex) {
     return (
-      <div className="px-2 py-3 text-center text-xs text-[var(--muted-foreground)]">
+      <div className="px-1 py-3 text-center text-xs text-[var(--muted-foreground)]">
         동성
       </div>
     );
   }
   if (locked) {
     return (
-      <div className="px-2 py-3 text-center">
+      <div className="px-1 py-3 text-center">
         <span className="text-sm">🔒</span>
       </div>
     );
   }
   if (score == null) {
     return (
-      <div className="px-2 py-3 text-center text-xs text-[var(--muted-foreground)]">—</div>
+      <div className="px-1 py-3 text-center text-xs text-[var(--muted-foreground)]">—</div>
     );
   }
   return (
-    <div className="px-2 py-3 text-center">
-      <span className={`text-sm font-bold ${accent ? "text-[var(--brand-gold)]" : "text-[var(--foreground)]"}`}>
+    <div className={`px-1 py-3 text-center ${activeSort ? "bg-[var(--brand-gold)]/5" : ""}`}>
+      <span className={`text-sm font-bold ${activeSort ? "text-[var(--brand-gold)]" : "text-[var(--foreground)]"}`}>
         {Math.round(Number(score))}
       </span>
       {medal && <span className="ml-0.5 text-xs">{medal}</span>}
