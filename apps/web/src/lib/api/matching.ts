@@ -96,3 +96,41 @@ export async function rejectMatch(
     { method: 'POST', token },
   );
 }
+
+// ---------------------------------------------------------------------------
+// 디스커버리
+// ---------------------------------------------------------------------------
+
+export interface DiscoveryCandidate {
+  id: string;
+  nickname: string;
+  score: number;
+  emoji: string;
+  label: string;
+  dayPillar: string;
+  gender: 'male' | 'female';
+  ageRange: string;
+  summaryOneLiner: string;
+}
+
+export interface DiscoveryResponse {
+  candidates: DiscoveryCandidate[];
+  total: number;
+}
+
+/** GET /matching/discovery */
+export async function getDiscovery(token: string): Promise<DiscoveryResponse> {
+  return apiClient<DiscoveryResponse>('/matching/discovery', { token });
+}
+
+/** POST /matching/express-interest */
+export async function expressInterest(
+  token: string,
+  targetId: string,
+): Promise<MatchEntity> {
+  return apiClient<MatchEntity>('/matching/express-interest', {
+    method: 'POST',
+    token,
+    body: { targetId },
+  });
+}

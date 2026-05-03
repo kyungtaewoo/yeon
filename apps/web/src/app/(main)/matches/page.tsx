@@ -164,6 +164,26 @@ export default function MatchesPage() {
           </Button>
         </div>
 
+        {/* 디스커버리 진입 카드 — 호환성 기반 추천 후보 */}
+        {token && (
+          <Card
+            className="border-none shadow-sm cursor-pointer overflow-hidden bg-[var(--brand-gold)]/5 hover:shadow-md transition-shadow"
+            onClick={() => router.push("/discover")}
+          >
+            <CardContent className="py-4 flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium text-[var(--foreground)]">
+                  ✨ 탐색하기
+                </p>
+                <p className="text-xs text-[var(--muted-foreground)] mt-0.5">
+                  당신과 잘 맞는 사람을 호환성 점수로 찾아드려요
+                </p>
+              </div>
+              <span className="text-[var(--brand-gold)]">→</span>
+            </CardContent>
+          </Card>
+        )}
+
         {/* 동기화 실패 배너 — persist 캐시로 폴백된 상태 안내 */}
         {token && syncStatus === 'error' && matches.length > 0 && (
           <div className="text-xs text-[var(--muted-foreground)] bg-[var(--muted)]/40 rounded-md px-3 py-2">
