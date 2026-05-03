@@ -398,7 +398,8 @@ export class MatchingService {
           summaryOneLiner,
         };
       })
-      .filter((c): c is NonNullable<typeof c> => c !== null && c.score >= 70);
+      // MVP 임계값 50 — starry 풀에서 70+ 가 드물어 풍부한 표본 위해 일시 낮춤. 풀 100명 도달 시 70 복귀.
+      .filter((c): c is NonNullable<typeof c> => c !== null && c.score >= 50);
 
     scored.sort((a, b) => b.score - a.score);
     const limited = scored.slice(0, 20);
