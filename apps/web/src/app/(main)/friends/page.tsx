@@ -245,30 +245,6 @@ export default function FriendsPage() {
           </Card>
         )}
 
-        {/* 보낸 초대 (수락 대기) — 친구 카운트엔 포함 X */}
-        {!loading && !errorMessage && sentPending.length > 0 && (
-          <div>
-            <p className="text-sm font-medium text-[var(--muted-foreground)] mb-3">
-              보낸 초대 ({sentPending.length}개)
-              <span className="ml-1 text-xs">· 수락 대기</span>
-            </p>
-            <div className="space-y-3">
-              {sentPending.map((invite) => (
-                <Card key={invite.id} className="border-none shadow-sm bg-[var(--muted)]/40">
-                  <CardContent className="py-3">
-                    <span className="font-medium text-[var(--muted-foreground)]">
-                      친구가 아직 수락하지 않았어요
-                    </span>
-                    <p className="text-xs text-[var(--muted-foreground)]">
-                      초대 {timeSince(invite.createdAt)}
-                    </p>
-                  </CardContent>
-                </Card>
-              ))}
-            </div>
-          </div>
-        )}
-
         {/* 내 친구 — 수락된 invite 만 (joined / saju_complete / calculated)
             계산 완료 ≥3 명: 매트릭스 / <3: 카드 (Q4=B 결정)
             joined / saju_complete: 항상 카드 (계산 대기 안내) */}
@@ -368,6 +344,30 @@ export default function FriendsPage() {
                     </Card>
                   );
                 })}
+            </div>
+          </div>
+        )}
+
+        {/* 보낸 초대 (수락 대기) — 내 친구 다음, 만료 위 */}
+        {!loading && !errorMessage && sentPending.length > 0 && (
+          <div>
+            <p className="text-sm font-medium text-[var(--muted-foreground)] mb-3">
+              보낸 초대 ({sentPending.length}개)
+              <span className="ml-1 text-xs">· 수락 대기</span>
+            </p>
+            <div className="space-y-3">
+              {sentPending.map((invite) => (
+                <Card key={invite.id} className="border-none shadow-sm bg-[var(--muted)]/40">
+                  <CardContent className="py-3">
+                    <span className="font-medium text-[var(--muted-foreground)]">
+                      친구가 아직 수락하지 않았어요
+                    </span>
+                    <p className="text-xs text-[var(--muted-foreground)]">
+                      초대 {timeSince(invite.createdAt)}
+                    </p>
+                  </CardContent>
+                </Card>
+              ))}
             </div>
           </div>
         )}
