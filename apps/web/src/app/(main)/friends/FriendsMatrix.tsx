@@ -53,9 +53,9 @@ export function FriendsMatrix({ friends, myUserId, myGender, isPremium }: Props)
       {/* 헤더 — 친구 col 1.3fr + 점수 3 col 1fr + chevron 자리 (탭 가능 표시) */}
       <div className="grid grid-cols-[minmax(0,1.3fr)_repeat(3,minmax(0,1fr))_18px] bg-[var(--brand-gold)]/5 text-[11px] font-medium text-[var(--muted-foreground)] border-b border-[var(--border)]">
         <div className="px-3 py-2">친구</div>
-        <div className="px-2 py-2 text-center">일반</div>
-        <div className="px-2 py-2 text-center">연인</div>
-        <div className="px-2 py-2 text-center">깊은</div>
+        <div className="px-1 py-2 text-center">일반궁합</div>
+        <div className="px-1 py-2 text-center">연인궁합</div>
+        <div className="px-1 py-2 text-center">깊은궁합</div>
         <div className="py-2" />
       </div>
 
