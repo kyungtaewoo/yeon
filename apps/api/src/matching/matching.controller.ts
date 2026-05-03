@@ -38,10 +38,10 @@ export class MatchingController {
     return { matches };
   }
 
-  /** GET /matching/:id — 매칭 상세 */
+  /** GET /matching/:id — 매칭 상세 (상대방 닉네임/사주 포함) */
   @Get(':id')
   async getMatch(@Request() req: any, @Param('id') id: string) {
-    return this.service.getMatch(id, req.user.id);
+    return this.service.getMatchDetail(id, req.user.id);
   }
 
   /** POST /matching/:id/accept */

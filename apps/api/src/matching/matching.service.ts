@@ -239,7 +239,7 @@ export class MatchingService {
     });
   }
 
-  /** 매칭 상세 (참여자만) */
+  /** 매칭 상세 (참여자만) — 내부용 raw entity */
   async getMatch(matchId: string, currentUserId: string): Promise<Match> {
     const match = await this.matchRepo.findOne({ where: { id: matchId } });
     if (!match) throw new NotFoundException('매칭을 찾을 수 없습니다');
@@ -247,6 +247,45 @@ export class MatchingService {
       throw new ForbiddenException('이 매칭에 대한 권한이 없습니다');
     }
     return match;
+  }
+
+  /**
+   * 매칭 상세 (UI 용) — 상대방 닉네임/사주/나이까지 함께 반환.
+   * 클라이언트가 추가 호출 없이 디테일 화면을 그릴 수 있도록 enrich.
+   */
+  async getMatchDetail(matchId: string, currentUserId: string) {
+    const match = await this.getMatch(matchId, currentUserId);
+    const counterpartId = match.userAId === currentUserId ? match.userBId : match.userAId;
+
+    const [counterpart, saju] = await Promise.all([
+      this.userRepo.findOne({ where: { id: counterpartId } }),
+      this.sajuRepo.findOne({ where: { userId: counterpartId } }),
+    ]);
+
+    const myDecision = match.userAId === currentUserId ? match.userADecision : match.userBDecision;
+
+    return {
+      match,
+      myDecision,
+      counterpart: counterpart
+        ? {
+            id: counterpart.id,
+            nickname: counterpart.nickname,
+            gender: counterpart.gender,
+            birthDate: counterpart.birthDate,
+            age: counterpart.birthDate ? calculateAge(counterpart.birthDate) : null,
+          }
+        : null,
+      counterpartSaju: saju
+        ? {
+            yearStem: saju.yearStem, yearBranch: saju.yearBranch,
+            monthStem: saju.monthStem, monthBranch: saju.monthBranch,
+            dayStem: saju.dayStem, dayBranch: saju.dayBranch,
+            hourStem: saju.hourStem, hourBranch: saju.hourBranch,
+            dominantElement: saju.dominantElement,
+          }
+        : null,
+    };
   }
 
   accept(matchId: string, userId: string): Promise<Match> {

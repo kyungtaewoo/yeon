@@ -254,7 +254,7 @@ function HomeInner() {
                   <Card
                     key={match.id}
                     className="border-none shadow-sm cursor-pointer hover:shadow-md transition-shadow"
-                    onClick={() => router.push(`/matches/${match.id}`)}
+                    onClick={() => router.push(`/match-detail?id=${match.id}`)}
                   >
                     <CardContent className="py-4 flex items-center justify-between">
                       <div>
